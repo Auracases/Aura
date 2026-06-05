@@ -228,17 +228,7 @@
   .ci-info .s{font-size:.72rem;color:var(--ink-soft);margin-top:2px;}
   .ci-price{font-weight:800;font-size:.9rem;}
   .ci-x{background:none;border:none;color:#B33A1B;font-size:1.05rem;cursor:pointer;padding:4px;}
-  .pay-note{
-    margin-top:14px;font-size:.78rem;background:#FFF6E6;border:1.5px dashed #D9A53C;border-radius:11px;
-    padding:11px 12px;color:#7A5A14;line-height:1.5;
-  }
-  .wa-btn{
-    width:100%;margin-top:13px;background:var(--green);color:#fff;border:2px solid var(--ink);
-    border-radius:14px;padding:14px;font-family:var(--font-display);font-weight:800;font-size:1rem;cursor:pointer;box-shadow:var(--shadow);
-  }
-  .wa-btn:active{transform:translate(3px,3px);box-shadow:none;}
   .empty-cart{text-align:center;color:var(--ink-soft);font-size:.88rem;padding:26px 0 14px;}
-  .demo-note{font-size:.68rem;color:var(--ink-soft);text-align:center;margin-top:12px;line-height:1.5;}
 
   /* ---------- toast ---------- */
   .toast{
@@ -248,6 +238,46 @@
     transition:transform .3s ease;pointer-events:none;white-space:nowrap;
   }
   .toast.show{transform:translate(-50%,0);}
+
+  /* ---------- checkout / confirmation ---------- */
+  .back-btn{background:none;border:none;color:var(--ink-soft);font-family:var(--font-body);font-weight:700;font-size:.82rem;cursor:pointer;padding:4px 0;margin-bottom:4px;}
+  .bill{background:#fff;border:2px solid var(--ink);border-radius:13px;padding:13px 14px;margin:12px 0 16px;font-size:.86rem;}
+  .bill .row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;}
+  .bill .row .s{color:var(--ink-soft);font-size:.74rem;}
+  .bill .sub{border-top:1.5px dashed #C9BFA9;margin-top:7px;padding-top:8px;}
+  .bill .grand{font-weight:800;font-size:1.05rem;border-top:2px solid var(--ink);margin-top:8px;padding-top:9px;}
+
+  .field{margin-top:14px;}
+  .field label{display:block;font-size:.8rem;font-weight:700;margin-bottom:6px;}
+  .field input,.field textarea{
+    width:100%;padding:13px;font-size:16px;font-family:var(--font-body);font-weight:600;
+    border:2px solid var(--ink);border-radius:12px;background:#FFFDF8;color:var(--ink);outline:none;resize:vertical;
+  }
+  .field input:focus,.field textarea:focus{border-color:var(--accent);}
+  .field input.bad,.field textarea.bad{border-color:#C8502B;background:#FCEFEA;}
+  .err{color:#B33A1B;font-size:.74rem;font-weight:600;margin-top:5px;min-height:0;}
+  .err:empty{display:none;}
+
+  .radio-row{display:flex;flex-direction:column;gap:9px;}
+  .radio{
+    display:flex;align-items:center;gap:10px;border:2px solid var(--ink);border-radius:12px;
+    padding:13px;background:#FFFDF8;cursor:pointer;font-weight:600;font-size:.9rem;min-height:48px;
+  }
+  .radio input{width:20px;height:20px;accent-color:var(--accent);flex-shrink:0;}
+  .radio b{color:var(--green);font-weight:800;}
+  .radio:has(input:checked){border-color:var(--accent);background:#FFF1EC;box-shadow:2px 2px 0 var(--accent);}
+
+  .submit-err{background:var(--red-bg);border:1.5px dashed #C8502B;border-radius:11px;padding:11px 12px;margin-top:14px;color:#8C2F12;font-size:.82rem;font-weight:600;line-height:1.45;}
+  .big-btn.loading{position:relative;color:transparent;}
+  .big-btn.loading::after{content:"";position:absolute;left:50%;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;border:3px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .confirm-tick{width:60px;height:60px;margin:6px auto 10px;border-radius:50%;background:var(--green-bg);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;border:2px solid var(--green);}
+  #confirmView{text-align:center;}
+  #confirmView h3{text-align:center;}
+  .conf-id{font-weight:800;font-size:1rem;margin:4px 0 6px;letter-spacing:.02em;}
+  .conf-next{text-align:left;font-size:.85rem;background:#FFF6E6;border:1.5px dashed #D9A53C;border-radius:11px;padding:13px;color:#7A5A14;line-height:1.55;margin-bottom:14px;}
+  .conf-next b{color:var(--ink);}
 
   footer{margin-top:34px;text-align:center;font-size:.7rem;color:var(--ink-soft);padding-bottom:10px;line-height:1.6;}
 </style>
@@ -335,20 +365,91 @@
 <!-- ============ CART DRAWER ============ -->
 <div class="overlay" id="overlay"></div>
 <div class="drawer" id="drawer">
-  <h3>Your cart</h3>
-  <div id="cartItems"></div>
-  <div class="pay-note" id="payNote" style="display:none"></div>
-  <button class="wa-btn" id="waBtn" style="display:none">Order on WhatsApp →</button>
-  <p class="demo-note">Demo checkout: this builds a ready-made WhatsApp order message.<br>In the real site this becomes bKash / Nagad / COD checkout.</p>
+
+  <!-- ===== VIEW: CART ===== -->
+  <div class="view" id="cartView">
+    <h3>Your cart</h3>
+    <div id="cartItems"></div>
+    <button class="big-btn" id="checkoutBtn" style="display:none;margin-top:14px;">Checkout →</button>
+  </div>
+
+  <!-- ===== VIEW: CHECKOUT ===== -->
+  <div class="view" id="checkoutView" style="display:none;">
+    <button class="back-btn" id="backToCart">← Back to cart</button>
+    <h3>Checkout</h3>
+
+    <!-- bill summary -->
+    <div class="bill" id="billBox"></div>
+
+    <!-- order form -->
+    <form id="orderForm" novalidate>
+      <div class="field">
+        <label for="cName">Full name</label>
+        <input type="text" id="cName" autocomplete="name" placeholder="Your name" />
+        <div class="err" id="errName"></div>
+      </div>
+
+      <div class="field">
+        <label for="cMobile">Mobile number</label>
+        <input type="tel" id="cMobile" inputmode="numeric" autocomplete="tel" maxlength="11" placeholder="01XXXXXXXXX" />
+        <div class="err" id="errMobile"></div>
+      </div>
+
+      <div class="field">
+        <label>Delivery area</label>
+        <div class="radio-row">
+          <label class="radio"><input type="radio" name="area" value="insideDhaka" /><span>Inside Dhaka <b id="dInside"></b></span></label>
+          <label class="radio"><input type="radio" name="area" value="outsideDhaka" /><span>Outside Dhaka <b id="dOutside"></b></span></label>
+        </div>
+        <div class="err" id="errArea"></div>
+      </div>
+
+      <div class="field">
+        <label for="cAddress">Full address</label>
+        <textarea id="cAddress" rows="3" placeholder="House, road, area, district"></textarea>
+        <div class="err" id="errAddress"></div>
+      </div>
+
+      <div class="field">
+        <label>Payment method</label>
+        <div class="radio-row">
+          <label class="radio"><input type="radio" name="pay" value="cod" /><span>Cash on Delivery</span></label>
+          <label class="radio"><input type="radio" name="pay" value="bkash" /><span>bKash / Nagad</span></label>
+        </div>
+        <div class="err" id="errPay"></div>
+      </div>
+
+      <div class="submit-err" id="submitErr" style="display:none;"></div>
+      <button type="submit" class="big-btn" id="placeBtn" disabled>Place Order</button>
+    </form>
+  </div>
+
+  <!-- ===== VIEW: CONFIRMATION ===== -->
+  <div class="view" id="confirmView" style="display:none;">
+    <div class="confirm-tick">✓</div>
+    <h3 id="confTitle">Order placed!</h3>
+    <p class="conf-id" id="confId"></p>
+    <div class="bill" id="confBill"></div>
+    <div class="conf-next" id="confNext"></div>
+    <button class="big-btn" id="confDone">Done</button>
+  </div>
+
 </div>
 
 <div class="toast" id="toast">Added to cart ✓</div>
 
 <script>
 /* ==================================================================
-   >>> EDIT ME <<<  1) YOUR WHATSAPP NUMBER (country code, no +)
+   >>> EDIT ME <<<  1) CONFIG — all your business settings live here.
    ================================================================== */
-const WHATSAPP_NUMBER = "8801XXXXXXXXX";
+const CONFIG = {
+  // bKash/Nagad number shown on confirmation when customer picks digital pay.
+  BKASH_NUMBER: "01XXXXXXXXX",
+  // Delivery charges in taka. Picked live from the area radio.
+  DELIVERY: { insideDhaka: 70, outsideDhaka: 130 },
+  // Google Apps Script Web App URL. Empty until Commit 2 is deployed.
+  ORDER_ENDPOINT: "",
+};
 
 /* ==================================================================
    >>> EDIT ME <<<  2) CASE TYPES & PRICES (taka)
@@ -699,7 +800,7 @@ function showToast(msg){
 
 /* ---------- cart drawer ---------- */
 const drawer = $("drawer"), overlay = $("overlay");
-$("cartBtn").onclick = () => { renderCart(); drawer.classList.add("show"); overlay.classList.add("show"); };
+$("cartBtn").onclick = () => { renderCart(); showView("cart"); drawer.classList.add("show"); overlay.classList.add("show"); };
 overlay.onclick = () => { drawer.classList.remove("show"); overlay.classList.remove("show"); };
 
 function renderCart(){
@@ -707,15 +808,13 @@ function renderCart(){
   box.innerHTML = "";
   if(state.cart.length === 0){
     box.innerHTML = `<div class="empty-cart">Cart is empty — pick a case first 🙂</div>`;
-    $("payNote").style.display = "none";
-    $("waBtn").style.display = "none";
+    $("checkoutBtn").style.display = "none";
     return;
   }
 
-  let total = 0, hasUpload = false;
+  let total = 0;
   state.cart.forEach((item, i) => {
     total += item.price;
-    if(item.designKind === "upload") hasUpload = true;
     const el = document.createElement("div");
     el.className = "cart-item";
     const thumbStyle = item.designUrl
@@ -741,31 +840,171 @@ function renderCart(){
   totalEl.innerHTML = `<span>Total</span><span>${taka(total)}</span>`;
   box.appendChild(totalEl);
 
-  const pay = $("payNote");
-  pay.style.display = "block";
-  pay.innerHTML = hasUpload
-    ? `🔒 Your order has a <b>custom photo case</b> — a small bKash/Nagad advance confirms the order (custom prints can't be resold). Rest on delivery.`
-    : `💵 Ready-made designs: full <b>Cash on Delivery</b> available, or pay by bKash/Nagad.`;
-
-  $("waBtn").style.display = "block";
+  $("checkoutBtn").style.display = "block";
 }
 
-$("waBtn").onclick = () => {
-  if(WHATSAPP_NUMBER.includes("X")){
-    showToast("Demo: set your WhatsApp number in the code");
-    return;
+/* ==================================================================
+   CHECKOUT FLOW (front-end). Views: cart -> checkout -> confirm.
+   ================================================================== */
+const cartView = $("cartView"), checkoutView = $("checkoutView"), confirmView = $("confirmView");
+
+function showView(which){
+  cartView.style.display     = which === "cart"     ? "block" : "none";
+  checkoutView.style.display = which === "checkout" ? "block" : "none";
+  confirmView.style.display  = which === "confirm"  ? "block" : "none";
+  drawer.scrollTop = 0;
+}
+
+const cartTotal = () => state.cart.reduce((s,i)=>s+i.price, 0);
+const deliveryFor = area => CONFIG.DELIVERY[area] || 0;
+
+/* open checkout from cart */
+$("checkoutBtn").onclick = () => {
+  // seed the live delivery labels on the radios
+  $("dInside").textContent  = taka(CONFIG.DELIVERY.insideDhaka);
+  $("dOutside").textContent = taka(CONFIG.DELIVERY.outsideDhaka);
+  renderBill();
+  showView("checkout");
+};
+$("backToCart").onclick = () => showView("cart");
+
+/* live bill — updates when area changes */
+function renderBill(){
+  const area = (document.querySelector('input[name="area"]:checked')||{}).value;
+  const sub  = cartTotal();
+  const rows = state.cart.map(it => `
+    <div class="row">
+      <span>${it.caseType} — ${escapeHtml(it.model)}
+        <span class="s">${escapeHtml(it.design)}${it.name ? ' · "'+escapeHtml(it.name)+'"' : ""}</span>
+      </span>
+      <b>${taka(it.price)}</b>
+    </div>`).join("");
+
+  let html = rows + `<div class="row sub"><span>Subtotal</span><b>${taka(sub)}</b></div>`;
+  if(area){
+    const del = deliveryFor(area);
+    html += `<div class="row"><span>Delivery (${area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka"})</span><b>${taka(del)}</b></div>`;
+    html += `<div class="row grand"><span>Grand total</span><b>${taka(sub+del)}</b></div>`;
+  } else {
+    html += `<div class="row"><span class="s">Pick a delivery area for the full total</span><b></b></div>`;
   }
-  let msg = "Hello! I want to order:\n";
-  state.cart.forEach((it, i) => {
-    msg += `\n${i+1}) ${it.caseType} — ${it.model}\n   Design: ${it.design}${it.name ? ' + name "'+it.name+'"' : ""}\n   ${taka(it.price)}`;
-  });
-  msg += `\n\nTotal: ${taka(state.cart.reduce((s,i)=>s+i.price,0))}`;
-  if(state.cart.some(i=>i.designKind==="upload")) msg += `\n(I will send my photo in this chat.)`;
-  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank");
+  $("billBox").innerHTML = html;
+  // confirmation bill (built later) reuses the same shape
+}
+
+/* ---------- validation ---------- */
+const fName = $("cName"), fMobile = $("cMobile"), fAddress = $("cAddress");
+const mobileOk = v => /^01\d{9}$/.test(v);
+
+function validate(showErrors){
+  const name = fName.value.trim();
+  const mobile = fMobile.value.trim();
+  const area = (document.querySelector('input[name="area"]:checked')||{}).value;
+  const address = fAddress.value.trim();
+  const pay = (document.querySelector('input[name="pay"]:checked')||{}).value;
+
+  const errs = {
+    name:    name ? "" : "Please enter your name.",
+    mobile:  mobileOk(mobile) ? "" : "Enter an 11-digit number starting with 01.",
+    area:    area ? "" : "Choose a delivery area.",
+    address: address ? "" : "Please enter your full address.",
+    pay:     pay ? "" : "Choose a payment method.",
+  };
+
+  if(showErrors){
+    $("errName").textContent    = errs.name;
+    $("errMobile").textContent  = errs.mobile;
+    $("errArea").textContent    = errs.area;
+    $("errAddress").textContent = errs.address;
+    $("errPay").textContent     = errs.pay;
+    fName.classList.toggle("bad", !!errs.name);
+    fMobile.classList.toggle("bad", !!errs.mobile);
+    fAddress.classList.toggle("bad", !!errs.address);
+  }
+
+  const valid = !errs.name && !errs.mobile && !errs.area && !errs.address && !errs.pay;
+  $("placeBtn").disabled = !valid;
+  return valid ? {name, mobile, area, address, pay} : null;
+}
+
+/* re-validate + re-bill on any input/selection */
+["input","change"].forEach(ev =>
+  $("orderForm").addEventListener(ev, e => {
+    if(e.target.name === "area") renderBill();
+    validate(false);
+    // clear a field's inline error once it becomes valid
+    if(e.target === fMobile && mobileOk(fMobile.value.trim())){ $("errMobile").textContent=""; fMobile.classList.remove("bad"); }
+    if(e.target === fName && fName.value.trim()){ $("errName").textContent=""; fName.classList.remove("bad"); }
+    if(e.target === fAddress && fAddress.value.trim()){ $("errAddress").textContent=""; fAddress.classList.remove("bad"); }
+  })
+);
+// mobile: digits only
+fMobile.addEventListener("input", () => { fMobile.value = fMobile.value.replace(/\D/g,"").slice(0,11); });
+
+/* ---------- generate order ID: CB + yyMMddHHmmss ---------- */
+function makeOrderId(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,"0");
+  return "CB" + p(d.getFullYear()%100) + p(d.getMonth()+1) + p(d.getDate())
+              + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
+
+/* ---------- place order (Commit 1: local confirm; Commit 2 adds POST) ---------- */
+$("orderForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const data = validate(true);
+  if(!data) return;
+  submitOrder(data);
+});
+
+function submitOrder(data){
+  const btn = $("placeBtn");
+  btn.classList.add("loading"); btn.disabled = true;
+  $("submitErr").style.display = "none";
+
+  // Commit 1: no backend yet — simulate a short submit then confirm.
+  const orderId = makeOrderId();
+  const sub = cartTotal(), del = deliveryFor(data.area), grand = sub + del;
+  setTimeout(() => {
+    btn.classList.remove("loading");
+    showConfirmation({orderId, data, sub, del, grand});
+  }, 600);
+}
+
+function showConfirmation({orderId, data, sub, del, grand}){
+  $("confId").textContent = "Order ID: " + orderId;
+
+  $("confBill").innerHTML =
+    state.cart.map(it => `<div class="row"><span>${it.caseType} — ${escapeHtml(it.model)}</span><b>${taka(it.price)}</b></div>`).join("")
+    + `<div class="row sub"><span>Subtotal</span><b>${taka(sub)}</b></div>`
+    + `<div class="row"><span>Delivery</span><b>${taka(del)}</b></div>`
+    + `<div class="row grand"><span>Grand total</span><b>${taka(grand)}</b></div>`;
+
+  const next = $("confNext");
+  if(data.pay === "bkash"){
+    next.innerHTML = `We'll call you on <b>${escapeHtml(data.mobile)}</b> to confirm.<br><br>
+      To pay now, send <b>${taka(grand)}</b> to <b>${escapeHtml(CONFIG.BKASH_NUMBER)}</b> (bKash/Nagad)
+      and put your order ID <b>${orderId}</b> as the reference.`;
+  } else {
+    next.innerHTML = `We'll call you on <b>${escapeHtml(data.mobile)}</b> to confirm your order.<br><br>
+      Payment is <b>Cash on Delivery</b> — pay <b>${taka(grand)}</b> when it arrives.`;
+  }
+
+  showView("confirm");
+  // order placed: clear the cart
+  state.cart = [];
+  $("cartCount").textContent = 0;
+}
+
+$("confDone").onclick = () => {
+  drawer.classList.remove("show"); overlay.classList.remove("show");
+  $("orderForm").reset();
+  showView("cart");
 };
 
 /* ---------- init ---------- */
 renderDesigns();
+showView("cart");
 </script>
 </body>
 </html>
