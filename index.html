@@ -858,7 +858,29 @@ function makeOrderId(){
               + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
 }
 
-/* ---------- place order (Commit 1: local confirm; Commit 2 adds POST) ---------- */
+/* ---------- shrink an uploaded photo (max 1600px, JPEG ~0.85) ----------
+   Keeps the POST payload small. Falls back to the original on any error. */
+function compressImage(dataUrl, maxPx = 1600, quality = 0.85){
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if(w > maxPx || h > maxPx){
+        const r = Math.min(maxPx / w, maxPx / h);
+        w = Math.round(w * r); h = Math.round(h * r);
+      }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      try { resolve(c.toDataURL("image/jpeg", quality)); }
+      catch(_) { resolve(dataUrl); }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/* ---------- place order: POST to the sheet, with retry on failure ---------- */
 $("orderForm").addEventListener("submit", e => {
   e.preventDefault();
   const data = validate(true);
@@ -866,18 +888,61 @@ $("orderForm").addEventListener("submit", e => {
   submitOrder(data);
 });
 
-function submitOrder(data){
+async function submitOrder(data){
   const btn = $("placeBtn");
   btn.classList.add("loading"); btn.disabled = true;
   $("submitErr").style.display = "none";
 
-  // Commit 1: no backend yet — simulate a short submit then confirm.
-  const orderId = makeOrderId();
+  const orderId = makeOrderId();   // CB + yyMMddHHmmss, generated client-side
   const sub = cartTotal(), del = deliveryFor(data.area), grand = sub + del;
-  setTimeout(() => {
+
+  try {
+    // items summary + compressed photos for the payload
+    const items = state.cart.map(it => ({
+      model: it.model, caseType: it.caseType, design: it.design,
+      name: it.name, price: it.price, hasPhoto: it.designKind === "upload"
+    }));
+
+    const photos = [];
+    for(let i = 0; i < state.cart.length; i++){
+      const it = state.cart[i];
+      if(it.designKind === "upload" && it.designUrl){
+        const jpeg = await compressImage(it.designUrl, 1600, 0.85);
+        photos.push({ name: `${orderId}_item${i+1}.jpg`, dataUrl: jpeg });
+      }
+    }
+
+    const payload = {
+      orderId,
+      name: data.name, mobile: data.mobile, area: data.area, address: data.address,
+      paymentMethod: data.pay === "bkash" ? "bKash/Nagad" : "Cash on Delivery",
+      subtotal: sub, delivery: del, total: grand,
+      items, photos
+    };
+
+    if(CONFIG.ORDER_ENDPOINT){
+      // text/plain avoids the CORS preflight that Apps Script rejects.
+      const res = await fetch(CONFIG.ORDER_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      let server = {};
+      try { server = await res.json(); } catch(_) {}
+      if(server && server.ok === false) throw new Error(server.error || "Server error");
+    }
+    // else: no endpoint set yet (pre-deploy) — confirm locally so the demo still works.
+
     btn.classList.remove("loading");
     showConfirmation({orderId, data, sub, del, grand});
-  }, 600);
+  } catch(err){
+    // Keep everything the customer typed; let them retry.
+    btn.classList.remove("loading");
+    btn.disabled = false;
+    $("submitErr").textContent = "Couldn't place order — check your internet and try again.";
+    $("submitErr").style.display = "block";
+  }
 }
 
 function showConfirmation({orderId, data, sub, del, grand}){
