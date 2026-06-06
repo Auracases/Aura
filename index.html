@@ -357,8 +357,7 @@
   </section>
 
   <footer>
-    CaseBari demo · Built as a working reference.<br>
-    Replace the demo data with your real sheet + prices.
+    CaseBari · তোমার ফোন, তোমার স্টাইল
   </footer>
 </div>
 
@@ -380,6 +379,14 @@
 
     <!-- bill summary -->
     <div class="bill" id="billBox"></div>
+
+    <!-- promo code -->
+    <div id="promoRow" style="display:flex;gap:8px;margin:10px 0 4px;">
+      <input type="text" id="promoInput" placeholder="Promo code" autocomplete="off"
+             style="flex:1;text-transform:uppercase;" />
+      <button type="button" id="applyPromo" class="back-btn" style="white-space:nowrap;">Apply</button>
+    </div>
+    <div id="promoMsg" style="font-size:.85rem;min-height:1.1em;margin-bottom:6px;"></div>
 
     <!-- order form -->
     <form id="orderForm" novalidate>
@@ -438,7 +445,8 @@
 
 <div class="toast" id="toast">Added to cart ✓</div>
 
-<!-- DATA lives in config.js (loaded first); index.html holds only logic. -->
+<!-- Supabase client + config, loaded before the app logic. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
 /* ================================================================
@@ -450,6 +458,7 @@ const state = {
   design:null,       // {kind:"preset"|"upload", ...}
   name:"",
   cart:[],
+  promo:null,        // {code, type, value, discount, label, freeDelivery} when applied
 };
 
 const $ = id => document.getElementById(id);
@@ -458,16 +467,101 @@ const taka = n => "৳" + n;
 /* ---------- forgiving search ---------- */
 function norm(s){ return s.toLowerCase().replace(/[^a-z0-9]/g,""); }
 
+/* ================================================================
+   LIVE DATA — everything comes from Supabase.
+   phones (cached 24h), case_types, designs, settings.
+   ================================================================ */
+const sb = (typeof supabase !== "undefined" && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_URL.startsWith("http"))
+  ? supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
+  : null;
+
+let PHONES   = [];                              // [{name, search_key, d2, d3, aliases:[]}]
+let AVAIL    = new Map();                        // search_key -> {d2, d3}
+let CASES    = CONFIG.FALLBACK.CASE_TYPES;       // case types (from DB)
+let DESIGNS  = CONFIG.FALLBACK.DESIGNS;          // designs (from DB)
+let SETTINGS = {
+  bkash_number: CONFIG.FALLBACK.BKASH_NUMBER,
+  delivery_inside: CONFIG.FALLBACK.DELIVERY.insideDhaka,
+  delivery_outside: CONFIG.FALLBACK.DELIVERY.outsideDhaka,
+  store_discount_active:false, store_discount_type:"none", store_discount_value:0, store_discount_label:""
+};
+
+// Availability for the selected phone. Unknown model -> only TPU/UV.
+function availFor(name){ return AVAIL.get(norm(name||"")) || {d2:false, d3:false}; }
+
+/* ---- phones cache: {ts, data}, valid for AVAIL_TTL_MS ---- */
+function readCache(key){
+  try{
+    const c = JSON.parse(localStorage.getItem(key) || "null");
+    // Treat an empty array as a cache miss so a prior failed/empty load
+    // can't stick for 24h (see writeCache — we never cache empty).
+    if(c && Array.isArray(c.data) && c.data.length && (Date.now() - c.ts) < CONFIG.AVAIL_TTL_MS) return c.data;
+  }catch(_){}
+  return null;
+}
+function readStale(key){
+  try{ return (JSON.parse(localStorage.getItem(key)||"null")||{}).data || null; }catch(_){ return null; }
+}
+function writeCache(key, data){
+  if(!Array.isArray(data) || !data.length) return;   // never cache an empty result
+  try{ localStorage.setItem(key, JSON.stringify({ts:Date.now(), data})); }catch(_){}
+}
+
+function indexPhones(rows){
+  PHONES = (rows||[]).map(p => ({
+    name: p.model_name, brand: p.brand || "", search_key: p.search_key || norm(p.model_name),
+    d2: !!p.avail_2d, d3: !!p.avail_3d, aliases: []
+  }));
+  AVAIL = new Map();
+  PHONES.forEach(p => AVAIL.set(p.search_key, {d2:p.d2, d3:p.d3}));
+}
+
+async function loadPhones(){
+  let rows = readCache("cb_phones");
+  if(!rows && sb){
+    try{
+      const { data, error } = await sb.from("phones").select("brand,model_name,search_key,avail_2d,avail_3d").limit(5000);
+      if(error) throw error;
+      rows = data; writeCache("cb_phones", rows);
+    }catch(_){ rows = readStale("cb_phones"); }
+  }
+  indexPhones(rows || []);
+}
+
+async function loadCaseTypes(){
+  if(!sb) return;
+  try{
+    const { data, error } = await sb.from("case_types").select("*").order("sort");
+    if(!error && data && data.length) CASES = data;
+  }catch(_){}
+}
+
+async function loadDesigns(){
+  if(!sb) return;
+  try{
+    const { data, error } = await sb.from("designs").select("*").eq("active", true).order("sort");
+    if(!error && data) DESIGNS = data;
+  }catch(_){}
+}
+
+async function loadSettings(){
+  if(!sb) return;
+  try{
+    const { data, error } = await sb.from("settings").select("*").eq("id",1).single();
+    if(!error && data) SETTINGS = data;
+  }catch(_){}
+}
+
 function searchModels(q){
   const nq = norm(q);
   if(!nq) return [];
   const scored = [];
-  for(const p of CONFIG.PHONE_DB){
-    const np = norm(p.name);
+  for(const p of PHONES){
+    const np = p.search_key || norm(p.name);
     let score = -1;
     if(np.startsWith(nq)) score = 0;
     else if(np.includes(nq)) score = 1;
-    else if(p.aliases.some(a => norm(a).includes(nq))) score = 2;
+    else if((p.aliases||[]).some(a => norm(a).includes(nq))) score = 2;
     if(score >= 0) scored.push({p, score});
   }
   scored.sort((a,b)=> a.score - b.score || a.p.name.localeCompare(b.p.name));
@@ -484,21 +578,23 @@ modelInput.addEventListener("input", () => {
 
   const results = searchModels(q);
   for(const p of results){
+    const av = availFor(p.name);
     const btn = document.createElement("button");
     btn.className = "sug";
     btn.innerHTML = `<span>${p.name}</span>
       <span class="badges">
-        ${p.d2 ? '<span class="mini-badge mb-green">2D</span>' : ''}
-        ${p.d3 ? '<span class="mini-badge mb-green">3D</span>' : ''}
+        ${av.d2 ? '<span class="mini-badge mb-green">2D</span>' : ''}
+        ${av.d3 ? '<span class="mini-badge mb-green">3D</span>' : ''}
         <span class="mini-badge mb-soft">TPU·UV</span>
       </span>`;
     btn.onclick = () => selectModel({...p, known:true});
     sugBox.appendChild(btn);
   }
 
-  /* Unknown-model fallback: never a dead end */
-  const exact = results.some(p => norm(p.name) === norm(q));
-  if(!exact && q.length >= 3){
+  /* Unknown-model fallback: only when the list has nothing close —
+     a rare/obscure brand. Common models always match above, so no
+     "use anyway" noise for them. */
+  if(results.length === 0 && q.length >= 3){
     const btn = document.createElement("button");
     btn.className = "sug unknown";
     btn.innerHTML = `<span>Use "<b>${escapeHtml(q)}</b>" anyway
@@ -555,18 +651,20 @@ function renderCases(){
   const grid = $("caseGrid");
   grid.innerHTML = "";
   const m = state.model;
+  const av = availFor(m.name);   // live 2D/3D availability for this model
+  const caseOk = c => c.always_available || (c.requires === "2d" ? av.d2 : c.requires === "3d" ? av.d3 : false);
   let anyUnavail = false;
 
-  for(const c of CONFIG.CASE_TYPES){
-    const ok = c.always || (c.id === "d2" ? m.d2 : c.id === "d3" ? m.d3 : false);
+  for(const c of CASES){
+    const ok = caseOk(c);
     if(!ok) anyUnavail = true;
 
     const card = document.createElement("div");
     card.className = "case-card" + (ok ? "" : " unavail");
     card.innerHTML = `
-      <h3>${c.name}</h3>
+      <h3>${escapeHtml(c.name)}</h3>
       <div class="price">${taka(c.price)}</div>
-      <div class="desc">${c.desc}</div>
+      <div class="desc">${escapeHtml(c.descr || "")}</div>
       <span class="avail-tag ${ok ? "t-ok" : "t-no"}">${ok ? "Available ✓" : "Not for this model"}</span>`;
     if(ok){
       card.onclick = () => {
@@ -583,8 +681,7 @@ function renderCases(){
 
   const note = $("unavailNote");
   if(anyUnavail){
-    const missing = CONFIG.CASE_TYPES.filter(c => !(c.always || (c.id==="d2"?m.d2:c.id==="d3"?m.d3:false)))
-                              .map(c=>c.name).join(" & ");
+    const missing = CASES.filter(c => !caseOk(c)).map(c=>c.name).join(" & ");
     note.innerHTML = `ℹ️ <b>${missing}</b> ${missing.includes("&")?"aren't":"isn't"} available for <b>${escapeHtml(m.name)}</b> yet — but TPU Soft &amp; UV Printed always are.`;
     note.classList.add("show");
   } else {
@@ -597,11 +694,12 @@ function renderDesigns(){
   const grid = $("designGrid");
   grid.innerHTML = "";
 
-  for(const d of CONFIG.DESIGNS){
+  for(const d of DESIGNS){
     const tile = document.createElement("div");
     tile.className = "design";
-    tile.innerHTML = `<div class="art" style="background:${d.css}">${d.emoji}</div>
-                      <div class="d-name">${d.name}</div>`;
+    tile.title = d.context || "";
+    tile.innerHTML = `<div class="art" style="background-image:url('${d.image_url}');background-size:cover;background-position:center"></div>
+                      <div class="d-name">${escapeHtml(d.name)}</div>`;
     tile.onclick = () => {
       state.design = {kind:"preset", ...d};
       document.querySelectorAll(".design").forEach(el=>el.classList.remove("selected"));
@@ -657,9 +755,10 @@ function updatePreview(){
     art.style.background = "#ddd"; art.style.backgroundImage = "";
     art.textContent = "📱";
   } else if(state.design.kind === "preset"){
-    art.style.background = state.design.css;
-    art.style.backgroundImage = "";
-    art.textContent = state.design.emoji;
+    art.textContent = "";
+    art.style.background = `url("${state.design.image_url}")`;
+    art.style.backgroundSize = "cover";
+    art.style.backgroundPosition = "center";
   } else {
     art.textContent = "";
     art.style.background = `url(${state.design.url})`;
@@ -687,15 +786,16 @@ function refreshSummary(){
 $("addBtn").onclick = () => {
   state.cart.push({
     model: state.model.name,
+    caseTypeId: state.caseType.id,
     caseType: state.caseType.name,
     price: state.caseType.price,
     design: state.design.name,
     designKind: state.design.kind,
-    designCss: state.design.kind === "preset" ? state.design.css : null,
+    designImg: state.design.kind === "preset" ? (state.design.image_url || null) : null,
     designUrl: state.design.kind === "upload" ? state.design.url : null,
-    emoji: state.design.emoji || "🖼️",
     name: state.name,
   });
+  state.promo = null;   // cart changed -> drop any applied promo
   $("cartCount").textContent = state.cart.length;
   showToast("Added to cart ✓");
 };
@@ -726,11 +826,12 @@ function renderCart(){
     total += item.price;
     const el = document.createElement("div");
     el.className = "cart-item";
-    const thumbStyle = item.designUrl
-      ? `background-image:url(${item.designUrl})`
-      : `background:${item.designCss || "#eee"}`;
+    const thumbImg = item.designUrl || item.designImg;
+    const thumbStyle = thumbImg
+      ? `background-image:url("${thumbImg}");background-size:cover;background-position:center`
+      : `background:#eee`;
     el.innerHTML = `
-      <div class="ci-thumb" style="${thumbStyle}">${item.designUrl ? "" : item.emoji}</div>
+      <div class="ci-thumb" style="${thumbStyle}">${thumbImg ? "" : "🖼️"}</div>
       <div class="ci-info">
         <div class="t">${item.caseType} · ${taka(item.price)}</div>
         <div class="s">${escapeHtml(item.model)} — ${escapeHtml(item.design)}${item.name ? ' + "'+escapeHtml(item.name)+'"' : ""}</div>
@@ -738,6 +839,7 @@ function renderCart(){
       <button class="ci-x" data-i="${i}">✕</button>`;
     el.querySelector(".ci-x").onclick = () => {
       state.cart.splice(i,1);
+      state.promo = null;   // cart changed -> drop any applied promo
       $("cartCount").textContent = state.cart.length;
       renderCart();
     };
@@ -765,40 +867,93 @@ function showView(which){
 }
 
 const cartTotal = () => state.cart.reduce((s,i)=>s+i.price, 0);
-const deliveryFor = area => CONFIG.DELIVERY[area] || 0;
+const deliveryFor = area => (area === "insideDhaka" ? SETTINGS.delivery_inside : SETTINGS.delivery_outside) || 0;
+
+/* store-wide sale discount (auto-applied, from settings) */
+function storeDiscount(sub){
+  if(!SETTINGS.store_discount_active) return 0;
+  const v = Number(SETTINGS.store_discount_value) || 0;
+  if(SETTINGS.store_discount_type === "percent") return Math.floor(sub * v / 100);
+  if(SETTINGS.store_discount_type === "flat")    return Math.min(v, sub);
+  return 0;
+}
 
 /* open checkout from cart */
 $("checkoutBtn").onclick = () => {
   // seed the live delivery labels on the radios
-  $("dInside").textContent  = taka(CONFIG.DELIVERY.insideDhaka);
-  $("dOutside").textContent = taka(CONFIG.DELIVERY.outsideDhaka);
+  $("dInside").textContent  = taka(deliveryFor("insideDhaka"));
+  $("dOutside").textContent = taka(deliveryFor("outsideDhaka"));
+  // reset promo UI for a fresh checkout
+  $("promoInput").value = ""; $("promoMsg").textContent = "";
   renderBill();
   showView("checkout");
 };
 $("backToCart").onclick = () => showView("cart");
 
-/* live bill — updates when area changes */
+/* ---------- promo code ---------- */
+$("applyPromo").onclick = async () => {
+  const code = $("promoInput").value.trim().toUpperCase();
+  const msg = $("promoMsg");
+  if(!code){ state.promo = null; msg.textContent = ""; renderBill(); return; }
+  if(!sb){ msg.style.color = "#b3261e"; msg.textContent = "Promo codes need a connection."; return; }
+
+  const sub = cartTotal();
+  const afterStore = sub - storeDiscount(sub);   // promo applies after the store sale
+  try{
+    const { data, error } = await sb.rpc("validate_promo", { p_code: code, p_subtotal: afterStore });
+    if(error) throw error;
+    if(!data || !data.valid){
+      state.promo = null;
+      msg.style.color = "#b3261e"; msg.textContent = (data && data.message) || "Invalid code";
+    } else {
+      state.promo = {
+        code, type: data.type, value: data.value,
+        discount: data.type === "free_delivery" ? 0 : data.discount,
+        freeDelivery: data.type === "free_delivery", label: data.label || code
+      };
+      msg.style.color = "#137a4b";
+      msg.textContent = data.type === "free_delivery" ? "Free delivery applied ✓" : `Code applied — ${taka(state.promo.discount)} off ✓`;
+    }
+  }catch(_){
+    state.promo = null;
+    msg.style.color = "#b3261e"; msg.textContent = "Couldn't check that code.";
+  }
+  renderBill();
+}
+
+/* compute the live bill numbers (also used for confirmation) */
+function billNumbers(area){
+  const sub = cartTotal();
+  const sDisc = storeDiscount(sub);
+  const pDisc = state.promo ? (state.promo.discount || 0) : 0;
+  const disc = Math.min(sub, sDisc + pDisc);
+  const freeDel = !!(state.promo && state.promo.freeDelivery);
+  const del = area ? (freeDel ? 0 : deliveryFor(area)) : 0;
+  return { sub, sDisc, pDisc, disc, del, freeDel, grand: sub - disc + del };
+}
+
+/* live bill — updates when area / promo changes */
 function renderBill(){
   const area = (document.querySelector('input[name="area"]:checked')||{}).value;
-  const sub  = cartTotal();
+  const n = billNumbers(area);
   const rows = state.cart.map(it => `
     <div class="row">
-      <span>${it.caseType} — ${escapeHtml(it.model)}
+      <span>${escapeHtml(it.caseType)} — ${escapeHtml(it.model)}
         <span class="s">${escapeHtml(it.design)}${it.name ? ' · "'+escapeHtml(it.name)+'"' : ""}</span>
       </span>
       <b>${taka(it.price)}</b>
     </div>`).join("");
 
-  let html = rows + `<div class="row sub"><span>Subtotal</span><b>${taka(sub)}</b></div>`;
+  let html = rows + `<div class="row sub"><span>Subtotal</span><b>${taka(n.sub)}</b></div>`;
+  if(n.sDisc > 0) html += `<div class="row"><span>${escapeHtml(SETTINGS.store_discount_label || "Discount")}</span><b>−${taka(n.sDisc)}</b></div>`;
+  if(n.pDisc > 0) html += `<div class="row"><span>Promo (${escapeHtml(state.promo.label)})</span><b>−${taka(n.pDisc)}</b></div>`;
   if(area){
-    const del = deliveryFor(area);
-    html += `<div class="row"><span>Delivery (${area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka"})</span><b>${taka(del)}</b></div>`;
-    html += `<div class="row grand"><span>Grand total</span><b>${taka(sub+del)}</b></div>`;
+    html += `<div class="row"><span>Delivery (${area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka"})${n.freeDel?" — free":""}</span><b>${taka(n.del)}</b></div>`;
+    html += `<div class="row grand"><span>Grand total</span><b>${taka(n.grand)}</b></div>`;
   } else {
     html += `<div class="row"><span class="s">Pick a delivery area for the full total</span><b></b></div>`;
   }
   $("billBox").innerHTML = html;
-  // confirmation bill (built later) reuses the same shape
 }
 
 /* ---------- validation ---------- */
@@ -880,7 +1035,7 @@ function compressImage(dataUrl, maxPx = 1600, quality = 0.85){
   });
 }
 
-/* ---------- place order: POST to the sheet, with retry on failure ---------- */
+/* ---------- place order: save to Supabase, with retry on failure ---------- */
 $("orderForm").addEventListener("submit", e => {
   e.preventDefault();
   const data = validate(true);
@@ -888,54 +1043,60 @@ $("orderForm").addEventListener("submit", e => {
   submitOrder(data);
 });
 
+/* turn a data: URL into a Blob for Storage upload */
+async function dataUrlToBlob(dataUrl){ return (await fetch(dataUrl)).blob(); }
+
 async function submitOrder(data){
   const btn = $("placeBtn");
   btn.classList.add("loading"); btn.disabled = true;
   $("submitErr").style.display = "none";
 
+  if(!sb){
+    btn.classList.remove("loading"); btn.disabled = false;
+    $("submitErr").textContent = "Store backend isn't configured yet.";
+    $("submitErr").style.display = "block";
+    return;
+  }
+
   const orderId = makeOrderId();   // CB + yyMMddHHmmss, generated client-side
-  const sub = cartTotal(), del = deliveryFor(data.area), grand = sub + del;
 
   try {
-    // items summary + compressed photos for the payload
-    const items = state.cart.map(it => ({
-      model: it.model, caseType: it.caseType, design: it.design,
-      name: it.name, price: it.price, hasPhoto: it.designKind === "upload"
-    }));
-
-    const photos = [];
+    // 1) upload any custom photos to the order-photos bucket
+    const photoUrls = [];
     for(let i = 0; i < state.cart.length; i++){
       const it = state.cart[i];
       if(it.designKind === "upload" && it.designUrl){
         const jpeg = await compressImage(it.designUrl, 1600, 0.85);
-        photos.push({ name: `${orderId}_item${i+1}.jpg`, dataUrl: jpeg });
+        const blob = await dataUrlToBlob(jpeg);
+        const path = `${orderId}/item${i+1}.jpg`;
+        const { error: upErr } = await sb.storage.from("order-photos").upload(path, blob, { contentType:"image/jpeg", upsert:true });
+        if(upErr) throw upErr;
+        const { data: pub } = sb.storage.from("order-photos").getPublicUrl(path);
+        photoUrls.push(pub.publicUrl);
       }
     }
 
+    // 2) build the payload — the server recomputes prices/discounts
+    const items = state.cart.map(it => ({
+      caseTypeId: it.caseTypeId, caseType: it.caseType, model: it.model,
+      design: it.design, name: it.name, hasPhoto: it.designKind === "upload"
+    }));
+
     const payload = {
-      orderId,
+      order_id: orderId,
       name: data.name, mobile: data.mobile, area: data.area, address: data.address,
-      paymentMethod: data.pay === "bkash" ? "bKash/Nagad" : "Cash on Delivery",
-      subtotal: sub, delivery: del, total: grand,
-      items, photos
+      payment_method: data.pay === "bkash" ? "bKash/Nagad" : "Cash on Delivery",
+      promo_code: state.promo ? state.promo.code : null,
+      items, photo_urls: photoUrls
     };
 
-    if(CONFIG.ORDER_ENDPOINT){
-      // text/plain avoids the CORS preflight that Apps Script rejects.
-      const res = await fetch(CONFIG.ORDER_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload)
-      });
-      if(!res.ok) throw new Error("HTTP " + res.status);
-      let server = {};
-      try { server = await res.json(); } catch(_) {}
-      if(server && server.ok === false) throw new Error(server.error || "Server error");
-    }
-    // else: no endpoint set yet (pre-deploy) — confirm locally so the demo still works.
+    // 3) place the order via RPC; returns server-computed totals
+    const { data: res, error } = await sb.rpc("place_order", { payload });
+    if(error) throw error;
+    if(res && res.ok === false) throw new Error(res.error || "Server error");
 
     btn.classList.remove("loading");
-    showConfirmation({orderId, data, sub, del, grand});
+    showConfirmation({ orderId, data, totals: res });
   } catch(err){
     // Keep everything the customer typed; let them retry.
     btn.classList.remove("loading");
@@ -945,19 +1106,21 @@ async function submitOrder(data){
   }
 }
 
-function showConfirmation({orderId, data, sub, del, grand}){
+function showConfirmation({orderId, data, totals}){
+  const sub = totals.subtotal, del = totals.delivery, disc = totals.discount || 0, grand = totals.total;
   $("confId").textContent = "Order ID: " + orderId;
 
-  $("confBill").innerHTML =
-    state.cart.map(it => `<div class="row"><span>${it.caseType} — ${escapeHtml(it.model)}</span><b>${taka(it.price)}</b></div>`).join("")
-    + `<div class="row sub"><span>Subtotal</span><b>${taka(sub)}</b></div>`
-    + `<div class="row"><span>Delivery</span><b>${taka(del)}</b></div>`
+  let bill = state.cart.map(it => `<div class="row"><span>${escapeHtml(it.caseType)} — ${escapeHtml(it.model)}</span><b>${taka(it.price)}</b></div>`).join("")
+    + `<div class="row sub"><span>Subtotal</span><b>${taka(sub)}</b></div>`;
+  if(disc > 0) bill += `<div class="row"><span>Discount</span><b>−${taka(disc)}</b></div>`;
+  bill += `<div class="row"><span>Delivery${totals.free_delivery?" — free":""}</span><b>${taka(del)}</b></div>`
     + `<div class="row grand"><span>Grand total</span><b>${taka(grand)}</b></div>`;
+  $("confBill").innerHTML = bill;
 
   const next = $("confNext");
   if(data.pay === "bkash"){
     next.innerHTML = `We'll call you on <b>${escapeHtml(data.mobile)}</b> to confirm.<br><br>
-      To pay now, send <b>${taka(grand)}</b> to <b>${escapeHtml(CONFIG.BKASH_NUMBER)}</b> (bKash/Nagad)
+      To pay now, send <b>${taka(grand)}</b> to <b>${escapeHtml(SETTINGS.bkash_number)}</b> (bKash/Nagad)
       and put your order ID <b>${orderId}</b> as the reference.`;
   } else {
     next.innerHTML = `We'll call you on <b>${escapeHtml(data.mobile)}</b> to confirm your order.<br><br>
@@ -965,8 +1128,8 @@ function showConfirmation({orderId, data, sub, del, grand}){
   }
 
   showView("confirm");
-  // order placed: clear the cart
-  state.cart = [];
+  // order placed: clear the cart + promo
+  state.cart = []; state.promo = null;
   $("cartCount").textContent = 0;
 }
 
@@ -977,8 +1140,13 @@ $("confDone").onclick = () => {
 };
 
 /* ---------- init ---------- */
-renderDesigns();
 showView("cart");
+renderDesigns();   // renders empty/fallback immediately
+(async () => {
+  await Promise.all([loadPhones(), loadCaseTypes(), loadDesigns(), loadSettings()]);
+  renderDesigns();                       // swap in live designs
+  if(state.model) renderCases();         // refresh cases if a model is already picked
+})();
 </script>
 </body>
 </html>
