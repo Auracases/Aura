@@ -3,7 +3,11 @@
     "allow": [
       "Bash(node -e ' *)",
       "Bash(git add *)",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(git mv *)",
+      "Bash(mkdir -p images)",
+      "Bash(touch images/.gitkeep)",
+      "Bash(perl -0pi -e 's/\\\\bPHONE_DB\\\\b/CONFIG.PHONE_DB/g; s/\\\\bCASE_TYPES\\\\b/CONFIG.CASE_TYPES/g; s/\\\\bDESIGNS\\\\b/CONFIG.DESIGNS/g;' index.html)"
     ]
   }
 }
