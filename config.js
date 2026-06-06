@@ -21,10 +21,12 @@ const CONFIG = {
      cached in the browser for this long so repeat visits don't refetch. */
   AVAIL_TTL_MS: 24 * 60 * 60 * 1000,   // 24 hours
 
-  /* ---- 3) ONE-TIME MIGRATION ----
-     The old Google Sheets API. Used ONLY by admin.html's
-     "Import phones" button to seed the Supabase phones table once. */
-  LEGACY_PHONES_URL: "https://script.google.com/macros/s/AKfycbybV45O71NzZc10ObuWHXdjzJDaqfN-T92WnZQrRqUOlhTCStVMVvrPcdbHE2jQq6zQ/exec",
+  /* ---- 3) AVAILABILITY SHEET ----
+     The Google Apps Script endpoint that serves the 2D/3D availability
+     list as JSON. The browser no longer fetches this directly — it is
+     stored in sync_sources.source_url and pulled server-side by the
+     `sync` Edge Function. Kept here for reference/setup only. */
+  AVAIL_SHEET_URL: "https://script.google.com/macros/s/AKfycbybV45O71NzZc10ObuWHXdjzJDaqfN-T92WnZQrRqUOlhTCStVMVvrPcdbHE2jQq6zQ/exec",
 
   /* ---- 4) OFFLINE FALLBACKS ----
      Shown only if Supabase can't be reached, so the page still renders.
