@@ -230,6 +230,88 @@ begin
 end $$;
 grant execute on function public.place_order(jsonb) to anon, authenticated;
 
+-- ---------- SYNC: master list + availability layer ----------
+
+-- Canonical normalizer — must match norm() in the JS and the generator:
+-- lowercase, then strip everything that isn't a-z or 0-9.
+create or replace function public.norm(s text)
+returns text language sql immutable as $$
+  select regexp_replace(lower(coalesce(s,'')), '[^a-z0-9]', '', 'g');
+$$;
+
+alter table public.phones add column if not exists manual_override boolean default false;
+alter table public.phones add column if not exists updated_at      timestamptz default now();
+-- on_sheet = this model appears in the availability sheet feed (set by the sheet
+-- sync). Lets admin show the small sheet list separately from the big GSM master.
+alter table public.phones add column if not exists on_sheet        boolean default false;
+
+create table if not exists public.sync_sources (
+  key            text primary key,         -- 'gsm' | 'sheet'
+  label          text default '',
+  enabled        boolean default true,       -- auto on/off toggle
+  frequency_days int     default 1,          -- gsm ~21, sheet ~3
+  source_url     text    default '',
+  last_run_at    timestamptz,
+  last_status    text    default '',
+  updated_at     timestamptz default now()
+);
+
+-- Seed both sources. Replace OWNER/REPO with the public GitHub repo, and
+-- PASTE_APPS_SCRIPT_URL with the availability sheet's Apps Script /exec URL.
+insert into public.sync_sources (key,label,enabled,frequency_days,source_url) values
+  ('gsm',  'GSM master model list', true, 21, 'https://cdn.jsdelivr.net/gh/OWNER/REPO@main/data/phones-master.json'),
+  ('sheet','Availability sheet',    true, 3,  'PASTE_APPS_SCRIPT_URL')
+on conflict (key) do nothing;
+
+alter table public.sync_sources enable row level security;
+drop policy if exists "admin all sync_sources" on public.sync_sources;
+create policy "admin all sync_sources" on public.sync_sources
+  for all to authenticated using (true) with check (true);
+-- No anon policy: the public cannot read sync config.
+
+-- INSERT-only master models. p_models: [{ "brand": "...", "model": "..." }, ...]
+-- Never touches availability flags. Returns rows inserted.
+create or replace function public.sync_master_models(p_models jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  insert into public.phones (brand, model_name, search_key)
+  select coalesce(m->>'brand',''), m->>'model', public.norm(m->>'model')
+  from jsonb_array_elements(coalesce(p_models,'[]'::jsonb)) as m
+  where coalesce(m->>'model','') <> '' and public.norm(m->>'model') <> ''
+  on conflict (search_key) do nothing;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- Upsert availability from the sheet. p_rows: [{brand, model, avail_2d, avail_3d}].
+-- INSERTs missing models (on_sheet=true); on conflict, always marks on_sheet=true
+-- and fills brand, but only overwrites the avail flags when manual_override = false
+-- (admin-pinned rows keep their flags). Returns rows affected.
+create or replace function public.sync_sheet_avail(p_rows jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  insert into public.phones (brand, model_name, search_key, avail_2d, avail_3d, on_sheet, updated_at)
+  select coalesce(r->>'brand',''), r->>'model', public.norm(r->>'model'),
+         coalesce((r->>'avail_2d')::boolean,false),
+         coalesce((r->>'avail_3d')::boolean,false), true, now()
+  from jsonb_array_elements(coalesce(p_rows,'[]'::jsonb)) as r
+  where coalesce(r->>'model','') <> '' and public.norm(r->>'model') <> ''
+  on conflict (search_key) do update
+    set avail_2d   = case when phones.manual_override then phones.avail_2d else excluded.avail_2d end,
+        avail_3d   = case when phones.manual_override then phones.avail_3d else excluded.avail_3d end,
+        on_sheet   = true,
+        brand      = case when phones.brand = '' then excluded.brand else phones.brand end,
+        updated_at = now();
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- Only the service role (used by the Edge Function) calls these. Lock out anon/authenticated.
+revoke all on function public.sync_master_models(jsonb) from anon, authenticated;
+revoke all on function public.sync_sheet_avail(jsonb)   from anon, authenticated;
+
 -- ---------- STORAGE BUCKETS ----------
 insert into storage.buckets (id, name, public) values ('designs','designs',true)
   on conflict (id) do nothing;
