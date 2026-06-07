@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Page not found — Aura Cases</title>
+<script src="analytics.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#FBF5EA; --ink:#211C15; --ink-soft:#6E6557; --card:#FFFFFF;
+    --accent:#FF4B1F; --line:#211C15; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Poppins',system-ui,sans-serif;background:var(--bg);color:var(--ink);
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .box{max-width:480px;width:100%;text-align:center;}
+  .emoji{font-size:4rem;line-height:1;margin-bottom:8px;}
+  .code{font-size:.8rem;font-weight:700;letter-spacing:.25em;color:var(--accent);margin-bottom:10px;}
+  h1{font-size:1.6rem;font-weight:800;margin-bottom:10px;}
+  p{color:var(--ink-soft);font-size:.95rem;line-height:1.6;margin-bottom:24px;}
+  .btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+  a.btn{text-decoration:none;font-weight:700;font-size:.92rem;padding:12px 20px;border-radius:14px;
+    border:2px solid var(--ink);box-shadow:3px 3px 0 var(--ink);transition:transform .05s;}
+  a.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink);}
+  a.primary{background:var(--accent);color:#fff;}
+  a.ghost{background:var(--card);color:var(--ink);}
+  .help{margin-top:22px;font-size:.82rem;color:var(--ink-soft);}
+  .help a{color:var(--ink);font-weight:700;}
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="emoji">📱🔍</div>
+    <div class="code">404 — PAGE NOT FOUND</div>
+    <h1>Oops! This page slipped out of its case.</h1>
+    <p>The link may be broken or the page moved. Let's get you back to designing your custom case.</p>
+    <div class="btns">
+      <a class="btn primary" id="homeLink" href="/">🏠 Back to store</a>
+      <a class="btn ghost" id="demosLink" href="/demos.html">📸 See examples</a>
+    </div>
+    <div class="help">
+      Need help? <a href="https://wa.me/8801755930682" target="_blank" rel="noopener">💬 WhatsApp us</a>
+      &nbsp;·&nbsp; <a href="https://www.facebook.com/auracasesbd/" target="_blank" rel="noopener">📘 Facebook</a>
+    </div>
+  </div>
+  <script>
+    // Build links relative to the site root, whether on github.io/Aura/ or a custom domain.
+    (function(){
+      var m = location.pathname.match(/^\/[^\/]+\//);            // e.g. "/Aura/" on project pages
+      var base = (m && m[0] !== "/") ? m[0] : "/";
+      document.getElementById("homeLink").href  = base;
+      document.getElementById("demosLink").href = base + "demos.html";
+    })();
+  </script>
+</body>
+</html>

@@ -1098,14 +1098,9 @@ $("fileInput").addEventListener("change", e => {
     const url = ev.target.result;
     const img = new Image();
     img.onload = () => {
-      const warn = $("uploadWarn");
-      /* Print-quality check: warn on small images */
-      if(img.naturalWidth < 1000 || img.naturalHeight < 1000){
-        warn.innerHTML = `⚠️ This photo is <b>${img.naturalWidth}×${img.naturalHeight}px</b> — it may print blurry. A photo of at least <b>1000×1000px</b> prints much sharper.`;
-        warn.classList.add("show");
-      } else {
-        warn.classList.remove("show");
-      }
+      // Dimensions captured for our reference (admin) — no customer-facing warning:
+      // if a photo is low-res we contact the customer for a better one instead.
+      $("uploadWarn").classList.remove("show");
       state.design = {kind:"upload", name:"Your photo", url, w:img.naturalWidth, h:img.naturalHeight};
       renderDesigns();         // rebuild grid so the upload tile shows the uploaded photo + selected
       renderDesignBanner();    // hide the catalog-design banner (uploads have no share link)
