@@ -199,6 +199,9 @@
     aspect-ratio:3/4.6;position:relative;transition:transform .12s ease;background:#fff;
   }
   .design:active{transform:scale(.96);}
+  .design .dz-zoom{position:absolute;top:5px;right:5px;z-index:3;background:rgba(255,255,255,.9);
+    border:1.5px solid var(--ink);border-radius:8px;width:28px;height:28px;font-size:.8rem;cursor:zoom-in;
+    display:flex;align-items:center;justify-content:center;padding:0;}
   .design.selected{box-shadow:3px 3px 0 var(--accent);border-color:var(--accent);}
   .design .art{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.7rem;}
   .design .d-name{
@@ -411,20 +414,6 @@
     <div class="design-grid" id="designGrid"></div>
     <input type="file" id="fileInput" accept="image/*" style="display:none" />
     <div class="upload-warn" id="uploadWarn"></div>
-
-    <div class="name-row">
-      <label for="nameInput">Add a name on the case (optional)</label>
-      <input type="text" id="nameInput" maxlength="16" placeholder="e.g. Tania ✨" />
-    </div>
-
-    <div class="preview-wrap">
-      <div class="phone-case">
-        <div class="pc-art" id="pcArt">📱</div>
-        <div class="camera"><i></i><i></i><i></i><i></i></div>
-        <div class="pc-name" id="pcName"></div>
-      </div>
-    </div>
-    <p class="preview-cap">Rough preview — final print follows your exact phone's shape.</p>
 
     <div class="summary" id="summary"></div>
     <button class="big-btn" id="addBtn" disabled>Add to cart</button>
@@ -819,14 +808,16 @@ function renderDesigns(){
     tile.title = d.context || "";
     if(state.design && state.design.kind === "preset" && String(state.design.id) === String(d.id)) tile.classList.add("selected");
     tile.innerHTML = `<div class="art" style="background-image:url('${d.image_url}');background-size:cover;background-position:center"></div>
+                      <button class="dz-zoom" title="Zoom">🔍</button>
                       <div class="d-name">${escapeHtml(d.name)}</div>`;
+    tile.querySelector(".dz-zoom").onclick = (e) => { e.stopPropagation(); openLightbox(d.image_url, "image"); };
     tile.onclick = () => {
       state.design = {kind:"preset", ...d};
       document.querySelectorAll(".design").forEach(el=>el.classList.remove("selected"));
       tile.classList.add("selected");
       $("uploadWarn").classList.remove("show");
       renderDesignBanner();
-      updatePreview(); refreshSummary();
+      refreshSummary();
     };
     grid.appendChild(tile);
   }
@@ -951,37 +942,12 @@ $("fileInput").addEventListener("change", e => {
       document.querySelectorAll(".design").forEach(el=>el.classList.remove("selected"));
       document.querySelector(".upload-tile").classList.add("selected");
       renderDesignBanner();   // hide the catalog-design banner (uploads have no share link)
-      updatePreview(); refreshSummary();
+      refreshSummary();
     };
     img.src = url;
   };
   reader.readAsDataURL(file);
 });
-
-/* ---------- name + preview ---------- */
-$("nameInput").addEventListener("input", e => {
-  state.name = e.target.value.trim();
-  updatePreview(); refreshSummary();
-});
-
-function updatePreview(){
-  const art = $("pcArt");
-  if(!state.design){
-    art.style.background = "#ddd"; art.style.backgroundImage = "";
-    art.textContent = "📱";
-  } else if(state.design.kind === "preset"){
-    art.textContent = "";
-    art.style.background = `url("${state.design.image_url}")`;
-    art.style.backgroundSize = "cover";
-    art.style.backgroundPosition = "center";
-  } else {
-    art.textContent = "";
-    art.style.background = `url(${state.design.url})`;
-    art.style.backgroundSize = "cover";
-    art.style.backgroundPosition = "center";
-  }
-  $("pcName").textContent = state.name;
-}
 
 /* ---------- summary + add to cart ---------- */
 function refreshSummary(){
