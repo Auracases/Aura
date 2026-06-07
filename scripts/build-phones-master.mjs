@@ -67,7 +67,9 @@ function main(){
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const supPath = path.join(__dirname, "..", "data", "local-brands-supplement.json");
   const supplement = JSON.parse(fs.readFileSync(supPath, "utf8"));
-  const merged = normalizeRows([...raw, ...supplement], { minYear: 2018 });
+  const recPath = path.join(__dirname, "..", "data", "recent-models-supplement.json");
+  const recent = JSON.parse(fs.readFileSync(recPath, "utf8"));
+  const merged = normalizeRows([...raw, ...supplement, ...recent], { minYear: 2018 });
   const outPath = path.join(__dirname, "..", "data", "phones-master.json");
   fs.writeFileSync(outPath, JSON.stringify(merged, null, 0));
   console.log(`Wrote ${merged.length} models -> ${outPath}`);
