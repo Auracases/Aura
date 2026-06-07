@@ -535,23 +535,33 @@ function writeCache(key, data){
 
 function indexPhones(rows){
   rows = rows || [];
-  const master = [], groups = [];
-  for(const p of rows){
-    const rec = {
-      name: p.model_name, brand: p.brand || "", search_key: p.search_key || norm(p.model_name),
-      d2: !!p.avail_2d, d3: !!p.avail_3d, aliases: []
-    };
-    (p.on_sheet ? groups : master).push(rec);   // on_sheet rows are the availability groups
-  }
-  // Search the clean master models. If none loaded (e.g. only the sheet is
-  // seeded), fall back to everything so search still works.
-  PHONES = master.length ? master : rows.map(p => ({
+  const toRec = p => ({
     name: p.model_name, brand: p.brand || "", search_key: p.search_key || norm(p.model_name),
     d2: !!p.avail_2d, d3: !!p.avail_3d, aliases: []
-  }));
-  AVAIL_GROUPS = groups.map(g => ({ key: g.search_key, d2: g.d2, d3: g.d3 }));
+  });
+  const master = [], sheet = [];
+  for(const p of rows) (p.on_sheet ? sheet : master).push(toRec(p));
+
+  // Availability index — every sheet row is an availability source (incl. the
+  // multi-model "group blobs" like "OPPO A15/ A15S/ A35").
+  AVAIL_GROUPS = sheet.map(g => ({ key: g.search_key, d2: g.d2, d3: g.d3 }));
   AVAIL = new Map();
   AVAIL_GROUPS.forEach(g => AVAIL.set(g.key, {d2:g.d2, d3:g.d3}));
+
+  // Search source = master models PLUS clean single-model sheet rows that the
+  // master doesn't already cover. A sheet row is "clean" if it names one model
+  // (no "/"). It's "covered" if a master key ends with its key — i.e. the master
+  // has the same model under a brand-prefixed name (master "appleiphone11"
+  // covers sheet "iphone11"), so we don't list both. Models only on the sheet
+  // (e.g. "OPPO A17", whose key collided with the master seed and was skipped)
+  // stay searchable.
+  const masterKeys = master.map(r => r.search_key);
+  const cleanSheet = sheet.filter(r =>
+    r.name && !r.name.includes("/") && r.search_key.length >= 5 &&
+    !masterKeys.some(mk => mk.endsWith(r.search_key))
+  );
+  PHONES = master.concat(cleanSheet);
+  if(!PHONES.length) PHONES = rows.map(toRec);   // fallback if nothing split as master
 }
 
 async function loadPhones(){
