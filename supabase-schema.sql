@@ -276,12 +276,14 @@ create table if not exists public.demos (
   url         text not null,
   caption     text default '',
   order_url   text default '',                 -- optional per-item order link (overrides category)
+  show_order  boolean default false,           -- show an Order button on this item
   sort        int  default 0,
   active      boolean default true,
   created_at  timestamptz default now()
 );
 alter table public.demos add column if not exists category_id bigint references public.demo_categories(id) on delete cascade;
 alter table public.demos add column if not exists order_url   text default '';
+alter table public.demos add column if not exists show_order  boolean default false;  -- per-item Order button
 alter table public.demos enable row level security;
 drop policy if exists "public read demos" on public.demos;
 create policy "public read demos" on public.demos for select to anon, authenticated using (true);

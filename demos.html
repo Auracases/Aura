@@ -154,7 +154,8 @@ function renderGallery(){
   items.forEach(d => {
     const cell = document.createElement("div");
     cell.className = "media";
-    const orderTag = d.order_url ? `<a class="order-tag" href="${esc(d.order_url)}">Order →</a>` : "";
+    const itemLink = d.order_url || cat.order_url || "index.html";
+    const orderTag = d.show_order ? `<a class="order-tag" href="${esc(itemLink)}">Order →</a>` : "";
     if(d.media_type === "video"){
       cell.innerHTML = `
         <span class="vtag">▶ VIDEO</span>
