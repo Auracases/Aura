@@ -87,8 +87,12 @@
     } catch (e) {}
     try {
       if (window.fbq) {
-        if (FB_STANDARD[name]) window.fbq("track", name, params);
-        else window.fbq("trackCustom", name, params);
+        // eventID lets the browser Purchase de-dupe against the server-side
+        // (CAPI) Purchase fired from the order DB trigger with the same order_id.
+        var eid = params.event_id || params.order_id;
+        var opts = eid ? { eventID: String(eid) } : undefined;
+        if (FB_STANDARD[name]) window.fbq("track", name, params, opts);
+        else window.fbq("trackCustom", name, params, opts);
       }
     } catch (e) {}
   };
