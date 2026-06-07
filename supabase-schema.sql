@@ -245,6 +245,9 @@ alter table public.phones add column if not exists updated_at      timestamptz d
 -- sync). Lets admin show the small sheet list separately from the big GSM master.
 alter table public.phones add column if not exists on_sheet        boolean default false;
 
+-- Admin-only note on an order (shown in the admin Orders tab; never to customers).
+alter table public.orders add column if not exists note text default '';
+
 create table if not exists public.sync_sources (
   key            text primary key,         -- 'gsm' | 'sheet'
   label          text default '',

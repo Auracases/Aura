@@ -79,6 +79,22 @@
   .note{background:#fff8e6;border:1px solid #f3e2a8;border-radius:10px;padding:9px 12px;font-size:.84rem;margin-bottom:12px}
   .loading{color:var(--muted);padding:20px;text-align:center}
   .field{margin-bottom:10px}
+
+  /* orders: clickable card + admin note pill */
+  .o-card{cursor:pointer;transition:box-shadow .12s ease}
+  .o-card:hover{box-shadow:0 2px 10px rgba(0,0,0,.08)}
+  .o-card .o-status,.o-card .o-del{cursor:default}
+  .o-note{background:#fff8e6;border:1px solid #f3e2a8;border-radius:8px;padding:6px 9px;font-size:.8rem;margin-top:8px}
+  .o-note b{color:#8a6d1a}
+
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(20,16,30,.55);display:flex;align-items:flex-start;
+         justify-content:center;padding:24px 14px;overflow-y:auto;z-index:100}
+  .modal.hidden{display:none}
+  .modal .sheet{background:#fff;border-radius:16px;max-width:560px;width:100%;padding:20px;margin:auto}
+  .modal .x{float:right;background:#f1eff5;color:var(--ink);border-radius:8px;padding:4px 10px}
+  .li-row{display:flex;gap:8px;margin-bottom:8px}
+  .li-row input,.li-row select{padding:7px 9px}
 </style>
 </head>
 <body>
@@ -129,12 +145,49 @@
 
   <!-- ORDERS -->
   <section id="tab-orders" class="hidden">
-    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
       <div class="muted" id="ordersCount"></div>
-      <button class="ghost" id="refreshOrders">Refresh</button>
+      <div class="row" style="gap:8px">
+        <button id="newOrderBtn">+ Manual order</button>
+        <button class="ghost" id="refreshOrders">Refresh</button>
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:12px">
+      <input id="orderSearch" placeholder="Search name / mobile / order ID…" class="grow" />
     </div>
     <div id="ordersList"><div class="loading">Loading…</div></div>
+    <div class="row" style="justify-content:center;margin-top:6px">
+      <button class="ghost" id="loadMoreOrders" style="display:none">Load more</button>
+    </div>
   </section>
+
+  <!-- order detail modal -->
+  <div id="orderModal" class="modal hidden"><div class="sheet" id="orderModalBody"></div></div>
+
+  <!-- manual order modal -->
+  <div id="manualModal" class="modal hidden"><div class="sheet">
+    <button class="x" id="manualClose">✕</button>
+    <h3>Add order manually</h3>
+    <div class="wrap-row">
+      <div class="grow" style="flex:1 1 160px"><label>Customer name</label><input id="mName" /></div>
+      <div class="grow" style="flex:1 1 140px"><label>Mobile</label><input id="mMobile" /></div>
+    </div>
+    <div class="wrap-row" style="margin-top:8px">
+      <div style="flex:1 1 140px"><label>Area</label><select id="mArea"><option value="insideDhaka">Inside Dhaka</option><option value="outsideDhaka">Outside Dhaka</option></select></div>
+      <div style="flex:1 1 140px"><label>Payment</label><select id="mPay"><option>Cash on Delivery</option><option>bKash/Nagad</option></select></div>
+      <div style="flex:1 1 120px"><label>Status</label><select id="mStatus"></select></div>
+    </div>
+    <div class="field" style="margin-top:8px"><label>Address</label><input id="mAddr" /></div>
+    <label>Items</label>
+    <div id="mItems"></div>
+    <button class="ghost" id="mAddItem" style="padding:5px 10px;font-size:.85rem">+ Add item</button>
+    <div class="field" style="margin-top:10px"><label>Admin note (optional)</label><input id="mNote" /></div>
+    <div class="row" style="justify-content:space-between;margin-top:6px">
+      <div class="muted" id="mTotals"></div>
+      <button id="mSave">Save order</button>
+    </div>
+    <div class="err" id="mMsg" style="margin-top:6px"></div>
+  </div></div>
 
   <!-- PROMOS -->
   <section id="tab-promos" class="hidden">
@@ -282,7 +335,7 @@ function showApp(){
 
 /* ================= TABS ================= */
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
-const LOADERS = { designs:loadDesigns, orders:loadOrders, promos:loadPromos, settings:loadSettings, phones:loadPhonesTab };
+const LOADERS = { designs:loadDesigns, orders:()=>loadOrders(true), promos:loadPromos, settings:loadSettings, phones:loadPhonesTab };
 function loadPhonesTab(){ loadSync(); showPhoneSub("sheet"); }
 function switchTab(tab){
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
@@ -375,44 +428,151 @@ $("addDesignBtn").onclick = async () => {
 };
 
 /* ================= ORDERS ================= */
-$("refreshOrders").onclick = loadOrders;
-async function loadOrders(){
-  const box = $("ordersList"); box.innerHTML = `<div class="loading">Loading…</div>`;
-  const { data, error } = await sb.from("orders").select("*").order("created_at", { ascending:false });
+const ORD = { offset:0, PAGE:30, q:"", done:false };
+let CASE_TYPES = null, SHOP = null;
+async function ensureShopData(){
+  if(!CASE_TYPES){ const { data } = await sb.from("case_types").select("*").order("sort"); CASE_TYPES = data || []; }
+  if(!SHOP){ const { data } = await sb.from("settings").select("*").eq("id",1).single(); SHOP = data || { delivery_inside:70, delivery_outside:130 }; }
+}
+function orderItemsText(o){
+  return (o.items||[]).map(it => `${it.caseType||it.caseTypeId||"item"} — ${it.model||""}${it.design?` · ${it.design}`:""}${it.name?` "${it.name}"`:""}${it.hasPhoto?" [photo]":""}`).join("\n");
+}
+
+$("refreshOrders").onclick = () => loadOrders(true);
+$("loadMoreOrders").onclick = () => loadOrders(false);
+let ordSearchTimer;
+$("orderSearch").addEventListener("input", () => { clearTimeout(ordSearchTimer); ordSearchTimer = setTimeout(()=>loadOrders(true), 300); });
+
+async function loadOrders(reset){
+  const box = $("ordersList");
+  if(reset){ ORD.offset = 0; ORD.done = false; ORD.q = $("orderSearch").value.trim(); box.innerHTML = `<div class="loading">Loading…</div>`; }
+  let query = sb.from("orders").select("*").order("created_at",{ascending:false}).range(ORD.offset, ORD.offset + ORD.PAGE - 1);
+  if(ORD.q){ const like = `%${ORD.q}%`; query = query.or(`name.ilike.${like},mobile.ilike.${like},order_id.ilike.${like}`); }
+  const { data, error } = await query;
   if(error){ box.innerHTML = `<div class="loading">Couldn't load.</div>`; return; }
-  $("ordersCount").textContent = data.length + " order" + (data.length===1?"":"s");
-  if(!data.length){ box.innerHTML = `<div class="loading">No orders yet.</div>`; return; }
-  box.innerHTML = "";
-  data.forEach(o => {
-    const photos = o.photo_urls || [];
-    const itemsText = (o.items||[]).map(it => `${it.caseType} — ${it.model} · ${it.design}${it.name?` "${it.name}"`:""}${it.hasPhoto?" [photo]":""}`).join("\n");
-    const card = document.createElement("div");
-    card.className = "o-card";
-    card.innerHTML = `
-      <div class="o-head">
-        <div><span class="o-id">${esc(o.order_id)}</span> <span class="muted">· ${esc(new Date(o.created_at).toLocaleString())}</span></div>
-        <div class="o-status">
-          <select>${STATUSES.map(s=>`<option ${s===o.status?"selected":""}>${s}</option>`).join("")}</select>
-          <span class="saved"></span>
-        </div>
-      </div>
-      <div class="o-meta">${esc(o.name)} · ${esc(o.mobile)} · ${esc(o.area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka")}</div>
-      <div class="o-meta">${esc(o.address)}</div>
-      <div class="o-items">${esc(itemsText)}</div>
-      <div class="o-head">
-        <div class="o-photos">${photos.length?photos.map((u,i)=>`<a href="${esc(u)}" target="_blank" rel="noopener">📎 photo ${i+1}</a>`).join(""):'<span class="muted" style="font-size:.82rem">no photos</span>'}</div>
-        <div>${o.discount?`<span class="muted">−${taka(o.discount)}${o.promo_code?` (${esc(o.promo_code)})`:""}</span> · `:""}<b>${taka(o.total)}</b> · ${esc(o.payment_method)}</div>
-      </div>`;
-    const sel = card.querySelector("select"), saved = card.querySelector(".saved");
-    sel.onchange = async () => {
-      sel.disabled = true;
-      const { error } = await sb.from("orders").update({ status: sel.value }).eq("id", o.id);
-      saved.textContent = error ? "Failed" : "Saved ✓"; sel.disabled = false;
-      setTimeout(()=>saved.textContent="",1500);
-    };
-    box.appendChild(card);
+  if(reset) box.innerHTML = "";
+  if(reset && !data.length){ box.innerHTML = `<div class="loading">No orders${ORD.q?" match your search":" yet"}.</div>`; }
+  data.forEach(o => box.appendChild(orderCard(o)));
+  ORD.offset += data.length;
+  ORD.done = data.length < ORD.PAGE;
+  $("loadMoreOrders").style.display = ORD.done ? "none" : "inline-block";
+  $("ordersCount").textContent = `${box.querySelectorAll(".o-card").length} shown${ORD.q?` · "${ORD.q}"`:""}`;
+}
+
+function orderCard(o){
+  const card = document.createElement("div");
+  card.className = "o-card";
+  card.innerHTML = `
+    <div class="o-head">
+      <div><span class="o-id">${esc(o.order_id)}</span> <span class="muted">· ${esc(new Date(o.created_at).toLocaleString())}</span></div>
+      <span class="pill ${o.status==="Cancelled"?"p-off":"p-on"}">${esc(o.status||"New")}</span>
+    </div>
+    <div class="o-meta">${esc(o.name||"")} · ${esc(o.mobile||"")} · ${esc(o.area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka")}</div>
+    <div class="o-head"><div class="muted" style="font-size:.82rem">${(o.items||[]).length} item(s) · tap to open</div><div><b>${taka(o.total)}</b> · ${esc(o.payment_method||"")}</div></div>
+    ${o.note?`<div class="o-note"><b>📝 Note:</b> ${esc(o.note)}</div>`:""}`;
+  card.onclick = () => openOrder(o);
+  return card;
+}
+
+/* ---- order detail modal ---- */
+function closeOrderModal(){ $("orderModal").classList.add("hidden"); }
+$("orderModal").onclick = (e) => { if(e.target.id==="orderModal") closeOrderModal(); };
+
+function openOrder(o){
+  const photos = o.photo_urls || [];
+  $("orderModalBody").innerHTML = `
+    <button class="x" id="omClose">✕</button>
+    <h3 style="margin-bottom:2px">${esc(o.order_id)}</h3>
+    <div class="muted" style="font-size:.82rem;margin-bottom:12px">${esc(new Date(o.created_at).toLocaleString())}</div>
+    <div class="field"><label>Status</label><select id="omStatus">${STATUSES.map(s=>`<option ${s===o.status?"selected":""}>${s}</option>`).join("")}</select></div>
+    <div class="o-meta"><b>${esc(o.name||"")}</b> · ${esc(o.mobile||"")}</div>
+    <div class="o-meta">${esc(o.area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka")} — ${esc(o.address||"")}</div>
+    <div class="o-items">${esc(orderItemsText(o))||"(no items)"}</div>
+    <div class="o-photos" style="margin:8px 0">${photos.length?photos.map((u,i)=>`<a href="${esc(u)}" target="_blank" rel="noopener">📎 photo ${i+1}</a>`).join(""):'<span class="muted" style="font-size:.82rem">no photos</span>'}</div>
+    <div class="o-meta">Subtotal ${taka(o.subtotal)} · Delivery ${taka(o.delivery)}${o.discount?` · −${taka(o.discount)}${o.promo_code?` (${esc(o.promo_code)})`:""}`:""} · <b>Total ${taka(o.total)}</b> · ${esc(o.payment_method||"")}</div>
+    <div class="field" style="margin-top:12px"><label>Admin note (only you see this)</label><textarea id="omNote" style="min-height:60px">${esc(o.note||"")}</textarea></div>
+    <div class="row" style="justify-content:space-between;margin-top:6px">
+      <button class="danger" id="omDelete">Delete</button>
+      <button id="omSave">Save</button>
+    </div>
+    <div class="err" id="omMsg" style="margin-top:6px"></div>`;
+  $("orderModal").classList.remove("hidden");
+  $("omClose").onclick = closeOrderModal;
+  $("omSave").onclick = async () => {
+    const msg = $("omMsg"); msg.style.color = "var(--muted)"; msg.textContent = "Saving…";
+    const { error } = await sb.from("orders").update({ status: $("omStatus").value, note: $("omNote").value.trim() }).eq("id", o.id);
+    if(error){ msg.style.color = "var(--bad)"; msg.textContent = error.message; return; }
+    msg.style.color = "var(--ok)"; msg.textContent = "Saved ✓";
+    setTimeout(()=>{ closeOrderModal(); loadOrders(true); }, 450);
+  };
+  $("omDelete").onclick = async () => {
+    if(!confirm(`Delete order ${o.order_id}? This can't be undone.`)) return;
+    const { error } = await sb.from("orders").delete().eq("id", o.id);
+    if(error){ $("omMsg").style.color = "var(--bad)"; $("omMsg").textContent = error.message; return; }
+    closeOrderModal(); loadOrders(true);
+  };
+}
+
+/* ---- manual order ---- */
+$("manualClose").onclick = () => $("manualModal").classList.add("hidden");
+$("manualModal").onclick = (e) => { if(e.target.id==="manualModal") $("manualModal").classList.add("hidden"); };
+$("mAddItem").onclick = () => addManualItem();
+$("mArea").addEventListener("change", manualTotals);
+
+$("newOrderBtn").onclick = async () => {
+  await ensureShopData();
+  $("mStatus").innerHTML = STATUSES.map(s=>`<option>${s}</option>`).join("");
+  ["mName","mMobile","mAddr","mNote"].forEach(id => $(id).value = "");
+  $("mArea").value = "insideDhaka"; $("mPay").selectedIndex = 0; $("mStatus").selectedIndex = 0; $("mMsg").textContent = "";
+  $("mItems").innerHTML = ""; addManualItem();
+  $("manualModal").classList.remove("hidden");
+};
+
+function addManualItem(){
+  const row = document.createElement("div"); row.className = "li-row";
+  row.innerHTML = `
+    <input class="mi-model" placeholder="Model (e.g. iPhone 13)" style="flex:2" />
+    <select class="mi-case" style="flex:1.6">${(CASE_TYPES||[]).map(c=>`<option value="${esc(c.id)}" data-price="${c.price}">${esc(c.name)} (${taka(c.price)})</option>`).join("")}</select>
+    <input class="mi-price" type="number" min="0" style="flex:1;max-width:90px" />
+    <button class="danger mi-del" style="padding:6px 10px">✕</button>`;
+  const caseSel = row.querySelector(".mi-case"), price = row.querySelector(".mi-price");
+  const setPrice = () => { price.value = caseSel.selectedOptions[0] ? caseSel.selectedOptions[0].dataset.price : 0; manualTotals(); };
+  caseSel.onchange = setPrice; price.oninput = manualTotals;
+  row.querySelector(".mi-del").onclick = () => { row.remove(); manualTotals(); };
+  $("mItems").appendChild(row); setPrice();
+}
+function manualItems(){
+  return [...$("mItems").querySelectorAll(".li-row")].map(r => {
+    const cs = r.querySelector(".mi-case").selectedOptions[0];
+    return { caseTypeId: r.querySelector(".mi-case").value, caseType: cs ? cs.textContent.replace(/\s*\(.*/,"") : "", model: r.querySelector(".mi-model").value.trim(), price: Number(r.querySelector(".mi-price").value)||0 };
   });
 }
+function manualTotals(){
+  const items = manualItems();
+  const sub = items.reduce((s,i)=>s+i.price, 0);
+  const del = $("mArea").value === "insideDhaka" ? (SHOP.delivery_inside||0) : (SHOP.delivery_outside||0);
+  $("mTotals").textContent = `Subtotal ${taka(sub)} + Delivery ${taka(del)} = ${taka(sub+del)}`;
+  return { sub, del, total: sub+del, items };
+}
+$("mSave").onclick = async () => {
+  const msg = $("mMsg"); msg.textContent = "";
+  const name = $("mName").value.trim(), mobile = $("mMobile").value.trim();
+  if(!name || !mobile){ msg.textContent = "Name and mobile are required."; return; }
+  const { sub, del, total, items } = manualTotals();
+  const realItems = items.filter(i => i.model);
+  if(!realItems.length){ msg.textContent = "Add at least one item with a model."; return; }
+  $("mSave").disabled = true;
+  const order_id = "CB" + Date.now().toString(36).toUpperCase().slice(-6) + Math.floor(Math.random()*36).toString(36).toUpperCase();
+  const { error } = await sb.from("orders").insert({
+    order_id, name, mobile, area: $("mArea").value, address: $("mAddr").value.trim(),
+    payment_method: $("mPay").value, items: realItems, subtotal: sub, delivery: del, discount: 0, total,
+    status: $("mStatus").value, note: $("mNote").value.trim(), photo_urls: []
+  });
+  $("mSave").disabled = false;
+  if(error){ msg.textContent = error.message; return; }
+  $("manualModal").classList.add("hidden");
+  loadOrders(true);
+};
 
 /* ================= PROMOS ================= */
 $("addPromoBtn").onclick = async () => {

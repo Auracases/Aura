@@ -1065,10 +1065,11 @@ fMobile.addEventListener("input", () => { fMobile.value = fMobile.value.replace(
 
 /* ---------- generate order ID: CB + yyMMddHHmmss ---------- */
 function makeOrderId(){
-  const d = new Date();
-  const p = n => String(n).padStart(2,"0");
-  return "CB" + p(d.getFullYear()%100) + p(d.getMonth()+1) + p(d.getDate())
-              + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  // short, readable, time-sortable-ish: CB + 6 base36 chars from the timestamp
+  // + 1 random char to avoid same-millisecond collisions. e.g. "CBL5K2P9X".
+  const t = Date.now().toString(36).toUpperCase().slice(-6);
+  const r = Math.floor(Math.random()*36).toString(36).toUpperCase();
+  return "CB" + t + r;
 }
 
 /* ---------- shrink an uploaded photo (max 1600px, JPEG ~0.85) ----------
