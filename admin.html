@@ -316,6 +316,12 @@
         <div style="flex:1 1 120px"><label>Value</label><input type="number" id="setSaleValue" /></div>
         <div style="flex:1 1 200px"><label>Label (shown at checkout)</label><input id="setSaleLabel" placeholder="Eid Sale" /></div>
       </div>
+      <h3 style="margin-top:16px">Announcement banner</h3>
+      <div class="muted" style="font-size:.8rem;margin-bottom:8px">A message shown at the top of the storefront — e.g. "Many new designs coming soon!". Toggle off to hide.</div>
+      <div class="wrap-row">
+        <label class="row" style="margin:0;gap:7px;cursor:pointer;flex:1 1 100%"><input type="checkbox" id="setAnnounceActive" style="width:auto" /> Show announcement</label>
+        <div style="flex:1 1 100%"><textarea id="setAnnounce" rows="2" placeholder="e.g. 🎨 Many new designs coming soon — stay tuned!"></textarea></div>
+      </div>
       <h3 style="margin-top:16px">Order notifications & export</h3>
       <div class="muted" style="font-size:.8rem;margin-bottom:8px">On every new order, ping Telegram + append to a Google Sheet. Leave blank to disable. (Needs the <code>pg_net</code> extension — see SETUP.)</div>
       <div class="wrap-row">
@@ -1036,6 +1042,8 @@ async function loadSettings(){
     $("setSaleType").value = s.store_discount_type || "none";
     $("setSaleValue").value = s.store_discount_value ?? 0;
     $("setSaleLabel").value = s.store_discount_label || "";
+    $("setAnnounceActive").checked = !!s.announcement_active;
+    $("setAnnounce").value = s.announcement || "";
   }
   // notification config lives in its own admin-only table
   try{ const { data: nc } = await sb.from("notify_config").select("*").eq("id",1).single();
@@ -1051,7 +1059,9 @@ $("saveSettings").onclick = async () => {
     store_discount_active: $("setSaleActive").checked,
     store_discount_type: $("setSaleType").value,
     store_discount_value: Number($("setSaleValue").value) || 0,
-    store_discount_label: $("setSaleLabel").value.trim()
+    store_discount_label: $("setSaleLabel").value.trim(),
+    announcement: $("setAnnounce").value.trim(),
+    announcement_active: $("setAnnounceActive").checked
   }).eq("id", 1);
   // notification config → admin-only table
   const { error: ncErr } = await sb.from("notify_config").update({

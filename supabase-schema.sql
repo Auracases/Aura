@@ -51,8 +51,13 @@ create table if not exists public.settings (
   store_discount_value  numeric default 0,
   store_discount_active boolean default false,
   store_discount_label  text default '',
+  announcement          text default '',         -- free-text banner shown on storefront
+  announcement_active   boolean default false,    -- toggle the announcement on/off
   constraint settings_singleton check (id = 1)
 );
+-- additive columns (table may already exist from an earlier run)
+alter table public.settings add column if not exists announcement        text default '';
+alter table public.settings add column if not exists announcement_active boolean default false;
 
 -- Promo codes.
 create table if not exists public.promos (

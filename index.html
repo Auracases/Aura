@@ -77,6 +77,12 @@
     font-weight:700;text-align:center;font-size:.95rem;letter-spacing:.01em;
   }
   .sale-banner.show{display:block;}
+  .announce-banner{
+    display:none;background:#FFF4D6;color:var(--ink);border:2px solid var(--ink);
+    border-radius:14px;box-shadow:var(--shadow);padding:12px 16px;margin-top:14px;
+    font-weight:600;text-align:center;font-size:.92rem;line-height:1.5;white-space:pre-line;
+  }
+  .announce-banner.show{display:block;}
 
   /* ---------- preset design banner (from an ad link or after picking) ---------- */
   .design-banner{
@@ -408,6 +414,9 @@
   </section>
 
   <!-- store-wide sale banner (shown when an active store discount is set in admin) -->
+  <!-- admin-editable announcement (settings.announcement) -->
+  <div id="announceBanner" class="announce-banner"></div>
+
   <div id="saleBanner" class="sale-banner"></div>
 
   <!-- preset/selected design banner (from an ad link, or after picking a design) -->
@@ -1519,6 +1528,7 @@ renderDesigns();   // renders empty/fallback immediately
 (async () => {
   await Promise.all([loadPhones(), loadCaseTypes(), loadDesigns(), loadSettings(), loadDemoData()]);
   renderDesigns();                       // swap in live designs
+  renderAnnounceBanner();                // admin announcement up top, if set
   renderSaleBanner();                    // show store-wide sale up top, if active
   applyDesignParam();                    // ad deep-link: ?design=<id> presets + pins the design
   if(state.model) renderCases();         // refresh cases if a model is already picked
@@ -1537,6 +1547,20 @@ function renderSaleBanner(){
         : SETTINGS.store_discount_type === "flat" ? `৳${v} OFF every order`
         : "Sale on now");
     b.textContent = "🎉 " + txt;
+    b.classList.add("show");
+  } else {
+    b.classList.remove("show");
+  }
+}
+
+/* Admin announcement banner — free text set in admin (settings.announcement),
+   shown only when announcement_active is on. Plain text (newlines kept). */
+function renderAnnounceBanner(){
+  const b = $("announceBanner");
+  if(!b) return;
+  const txt = SETTINGS && SETTINGS.announcement ? String(SETTINGS.announcement).trim() : "";
+  if(SETTINGS && SETTINGS.announcement_active && txt){
+    b.textContent = "📢 " + txt;
     b.classList.add("show");
   } else {
     b.classList.remove("show");
