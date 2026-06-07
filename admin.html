@@ -140,6 +140,7 @@
     <button data-tab="settings">Pricing &amp; Settings</button>
     <button data-tab="phones">Phones</button>
     <button data-tab="demos">Demos</button>
+    <button data-tab="shop">Shop</button>
   </div>
 
   <!-- DESIGNS -->
@@ -206,6 +207,34 @@
 
   <!-- order detail modal -->
   <div id="orderModal" class="modal hidden"><div class="sheet" id="orderModalBody"></div></div>
+
+  <!-- SHOP (ready-made products) -->
+  <section id="tab-shop" class="hidden">
+    <div class="card">
+      <h3>Product categories</h3>
+      <div class="row" style="gap:8px"><input id="pcatName" placeholder="New category (e.g. Glass, Silicone)" class="grow" /><button id="pcatAdd">Add</button></div>
+      <div id="pcatMsg" class="err" style="margin-top:6px"></div>
+      <div id="pcatList" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h3>Add a product</h3>
+      <div class="wrap-row">
+        <div style="flex:2 1 200px"><label>Name</label><input id="spName" placeholder="e.g. Marble Glass Case" /></div>
+        <div style="flex:1 1 110px"><label>Price (৳)</label><input id="spPrice" type="number" min="0" /></div>
+        <div style="flex:1 1 110px"><label>Old price (optional)</label><input id="spOld" type="number" min="0" /></div>
+        <div style="flex:1 1 150px"><label>Category</label><select id="spCat"></select></div>
+        <div style="flex:1 1 180px"><label>Fits (model/note)</label><input id="spFit" placeholder="iPhone 15 Pro / Fits most" /></div>
+        <div style="flex:1 1 100%"><label>Description</label><textarea id="spDesc" style="min-height:60px"></textarea></div>
+        <div style="flex:1 1 100%"><label>Images (one or more)</label><input id="spImgs" type="file" accept="image/*" multiple /></div>
+      </div>
+      <div class="row" style="margin-top:12px;justify-content:space-between">
+        <label class="row" style="margin:0;gap:7px"><input type="checkbox" id="spActive" checked style="width:auto" /> Active</label>
+        <button id="spAddBtn">Add product</button>
+      </div>
+      <div id="spMsg" class="muted" style="font-size:.82rem;margin-top:8px"></div>
+    </div>
+    <div id="shopList"><div class="loading">Loading…</div></div>
+  </section>
 
   <!-- full-image/video preview (designs, demos, order photos) -->
   <div id="admLb" class="adm-lb"></div>
@@ -421,11 +450,11 @@ function showApp(){
 
 /* ================= TABS ================= */
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
-const LOADERS = { designs:loadDesigns, orders:()=>loadOrders(true), promos:loadPromos, settings:loadSettings, phones:loadPhonesTab, demos:loadDemos };
+const LOADERS = { designs:loadDesigns, orders:()=>loadOrders(true), promos:loadPromos, settings:loadSettings, phones:loadPhonesTab, demos:loadDemos, shop:loadShop };
 function loadPhonesTab(){ loadSync(); showPhoneSub("sheet"); }
 function switchTab(tab){
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
-  ["designs","orders","promos","settings","phones","demos"].forEach(t => $("tab-"+t).classList.toggle("hidden", t !== tab));
+  ["designs","orders","promos","settings","phones","demos","shop"].forEach(t => $("tab-"+t).classList.toggle("hidden", t !== tab));
   (LOADERS[tab] || (()=>{}))();
 }
 
@@ -1357,6 +1386,124 @@ async function renderDemoItems(){
     const cards = [...grid.querySelectorAll(".d-card")];
     for(let i = 0; i < cards.length; i++){ await sb.from("demos").update({ sort: i }).eq("id", Number(cards[i].dataset.id)); }
   });
+}
+
+/* ================= SHOP (ready-made products) ================= */
+let PCATS = [];
+function pcatOptions(sel){ return `<option value="">— none —</option>` + PCATS.map(c=>`<option value="${c.id}" ${String(sel)===String(c.id)?"selected":""}>${esc(c.name)}</option>`).join(""); }
+
+async function loadShop(){
+  const { data: cats } = await sb.from("product_categories").select("*").order("sort");
+  PCATS = cats || [];
+  if($("spCat")) $("spCat").innerHTML = pcatOptions("");
+  renderPCats();
+  renderShopList();
+}
+$("pcatAdd").onclick = async () => {
+  const n = $("pcatName").value.trim(), m = $("pcatMsg"); m.textContent = "";
+  if(!n){ m.textContent = "Enter a name."; return; }
+  const { error } = await sb.from("product_categories").insert({ name: n, sort: PCATS.length + 1 });
+  if(error){ m.textContent = error.message; return; }
+  $("pcatName").value = ""; loadShop();
+};
+function renderPCats(){
+  const box = $("pcatList"); if(!PCATS.length){ box.innerHTML = `<div class="muted" style="font-size:.82rem">No categories yet.</div>`; return; }
+  box.innerHTML = "";
+  PCATS.forEach(c => {
+    const row = document.createElement("div"); row.className = "row"; row.style.cssText = "gap:8px;margin:6px 0;align-items:center";
+    row.innerHTML = `<input class="c-name" value="${esc(c.name)}" style="flex:2" /><input type="number" class="c-sort" value="${c.sort||0}" style="width:70px" /><button class="ghost c-save" style="padding:5px 10px">Save</button><button class="danger c-del" style="padding:5px 10px">Delete</button>`;
+    row.querySelector(".c-save").onclick = async (e) => { e.target.disabled = true; await sb.from("product_categories").update({ name: row.querySelector(".c-name").value.trim(), sort: Number(row.querySelector(".c-sort").value)||0 }).eq("id", c.id); e.target.textContent = "✓"; setTimeout(loadShop, 500); };
+    row.querySelector(".c-del").onclick = async () => { if(!confirm(`Delete category "${c.name}"?`)) return; await sb.from("product_categories").delete().eq("id", c.id); loadShop(); };
+    box.appendChild(row);
+  });
+}
+
+async function uploadProductImages(files){
+  const urls = [];
+  for(const f of files){
+    const blob = await dataUrlToBlob(await compressImage(await fileToDataUrl(f), 1400, 0.85));
+    const path = `products/${Date.now()}-${Math.floor(Math.random()*1e5)}.jpg`;
+    const { error } = await sb.storage.from("designs").upload(path, blob, { contentType:"image/jpeg", upsert:false });
+    if(error) throw error;
+    urls.push(sb.storage.from("designs").getPublicUrl(path).data.publicUrl);
+  }
+  return urls;
+}
+$("spAddBtn").onclick = async () => {
+  const msg = $("spMsg"); msg.style.color = "var(--bad)"; msg.textContent = "";
+  const name = $("spName").value.trim(), price = Number($("spPrice").value)||0;
+  if(!name){ msg.textContent = "Name required."; return; }
+  if(!price){ msg.textContent = "Price required."; return; }
+  $("spAddBtn").disabled = true;
+  try{
+    msg.style.color = "var(--muted)"; msg.textContent = "Uploading images…";
+    const image_urls = await uploadProductImages([...$("spImgs").files]);
+    const { error } = await sb.from("readymade_products").insert({
+      name, price, old_price: $("spOld").value ? Number($("spOld").value) : null,
+      description: $("spDesc").value.trim(), category_id: $("spCat").value ? Number($("spCat").value) : null,
+      model_fit: $("spFit").value.trim(), image_urls, active: $("spActive").checked, sort: 0
+    });
+    if(error) throw error;
+    ["spName","spPrice","spOld","spDesc","spFit"].forEach(id=>$(id).value=""); $("spImgs").value=""; $("spActive").checked=true;
+    msg.style.color = "var(--ok)"; msg.textContent = "Added ✓";
+    renderShopList();
+  }catch(err){ msg.style.color = "var(--bad)"; msg.textContent = err.message || "Couldn't add"; }
+  $("spAddBtn").disabled = false;
+};
+
+async function renderShopList(){
+  const box = $("shopList"); box.innerHTML = `<div class="loading">Loading…</div>`;
+  const { data, error } = await sb.from("readymade_products").select("*").order("sort");
+  if(error){ box.innerHTML = `<div class="loading">Couldn't load.</div>`; return; }
+  if(!data.length){ box.innerHTML = `<div class="loading">No products yet — add one above.</div>`; return; }
+  box.innerHTML = `<div class="bulk-bar"><label class="row" style="gap:6px;margin:0"><input type="checkbox" id="spSelAll" style="width:auto" /> Select all</label><span class="grow"></span><button class="danger" id="spDelSel">Delete selected</button></div><div class="d-grid"></div>`;
+  const grid = box.querySelector(".d-grid"); const refs = [];
+  data.forEach(p => {
+    const card = document.createElement("div"); card.className = "d-card";
+    const img = (p.image_urls&&p.image_urls[0])||"";
+    card.innerHTML = `
+      <div class="d-thumb" style="background-image:url('${esc(img)}')"></div>
+      <div class="d-body">
+        <div class="row" style="justify-content:space-between">
+          <label class="row" style="gap:6px;margin:0"><input type="checkbox" class="d-pick" style="width:auto" /><input class="f-name" value="${esc(p.name)}" style="font-weight:700;border:none;padding:2px 0" /></label>
+          <span class="pill ${p.active?"p-on":"p-off"}">${p.active?"Active":"Hidden"}</span>
+        </div>
+        <div class="row" style="gap:6px;margin-top:6px"><input type="number" class="f-price" value="${p.price}" style="width:90px;padding:4px 8px" placeholder="Price" /><input type="number" class="f-old" value="${p.old_price||""}" style="width:90px;padding:4px 8px" placeholder="Old" /><select class="f-cat" style="flex:1;padding:4px 8px">${pcatOptions(p.category_id)}</select></div>
+        <input class="f-fit" value="${esc(p.model_fit||"")}" placeholder="Fits…" style="margin-top:6px" />
+        <textarea class="f-desc" placeholder="Description" style="margin-top:6px;min-height:42px">${esc(p.description||"")}</textarea>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${(p.image_urls||[]).map(u=>`<div style="width:40px;height:40px;border-radius:6px;border:1px solid var(--line);background:#eee url('${esc(u)}') center/cover;cursor:zoom-in" data-img="${esc(u)}"></div>`).join("")}<label style="font-size:.72rem;border:1px dashed var(--line);border-radius:6px;padding:4px 8px;cursor:pointer">+ img<input type="file" accept="image/*" multiple class="f-addimg" style="display:none"/></label></div>
+        <div class="row" style="margin-top:6px"><label style="margin:0">Sort</label><input type="number" class="f-sort" value="${p.sort||0}" style="width:80px;padding:4px 8px" /></div>
+        <div class="saved"></div>
+        <div class="d-actions"><button class="ghost b-save">Save</button><button class="ghost b-toggle">${p.active?"Hide":"Show"}</button><button class="danger b-del">Remove</button></div>
+      </div>`;
+    card.querySelectorAll("[data-img]").forEach(el => el.onclick = () => admLB(el.dataset.img, "image"));
+    const th = card.querySelector(".d-thumb"); if(th){ th.style.cursor="zoom-in"; th.onclick = () => img && admLB(img,"image"); }
+    const saved = card.querySelector(".saved");
+    card.querySelector(".f-addimg").onchange = async (e) => {
+      try{ const more = await uploadProductImages([...e.target.files]); const urls = [...(p.image_urls||[]), ...more];
+        await sb.from("readymade_products").update({ image_urls: urls }).eq("id", p.id); renderShopList(); }catch(err){ alert(err.message); }
+    };
+    card.querySelector(".b-save").onclick = async (e) => {
+      e.target.disabled = true; const cv = card.querySelector(".f-cat").value;
+      const { error } = await sb.from("readymade_products").update({
+        name: card.querySelector(".f-name").value.trim(), price: Number(card.querySelector(".f-price").value)||0,
+        old_price: card.querySelector(".f-old").value ? Number(card.querySelector(".f-old").value) : null,
+        category_id: cv ? Number(cv) : null, model_fit: card.querySelector(".f-fit").value.trim(),
+        description: card.querySelector(".f-desc").value.trim(), sort: Number(card.querySelector(".f-sort").value)||0
+      }).eq("id", p.id);
+      saved.textContent = error ? "Failed" : "Saved ✓"; e.target.disabled = false; setTimeout(()=>saved.textContent="",1500);
+    };
+    card.querySelector(".b-toggle").onclick = async () => { await sb.from("readymade_products").update({ active: !p.active }).eq("id", p.id); renderShopList(); };
+    card.querySelector(".b-del").onclick = async () => { if(!confirm(`Remove "${p.name}"?`)) return; await sb.from("readymade_products").delete().eq("id", p.id); renderShopList(); };
+    grid.appendChild(card); refs.push({ card, p });
+  });
+  $("spSelAll").onclick = (e) => refs.forEach(r => r.card.querySelector(".d-pick").checked = e.target.checked);
+  $("spDelSel").onclick = async () => {
+    const picked = refs.filter(r => r.card.querySelector(".d-pick").checked);
+    if(!picked.length){ alert("Tick products first."); return; }
+    if(!confirm(`Delete ${picked.length} product(s)?`)) return;
+    await sb.from("readymade_products").delete().in("id", picked.map(r=>r.p.id)); renderShopList();
+  };
 }
 
 boot();

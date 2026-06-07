@@ -181,8 +181,12 @@ begin
   select * into s from public.settings where id = 1;
 
   for it in select value from jsonb_array_elements(coalesce(payload->'items','[]'::jsonb)) loop
-    select price into cprice from public.case_types where id = it->>'caseTypeId';
-    sub := sub + coalesce(cprice,0);
+    if it ? 'productId' then
+      select price into cprice from public.readymade_products where id = (it->>'productId')::bigint and active;
+    else
+      select price into cprice from public.case_types where id = it->>'caseTypeId';
+    end if;
+    sub := sub + coalesce(cprice,0) * greatest(coalesce(nullif(it->>'qty','')::int, 1), 1);
   end loop;
 
   deliv := case when area = 'insideDhaka' then coalesce(s.delivery_inside,0) else coalesce(s.delivery_outside,0) end;
@@ -267,6 +271,39 @@ create policy "public read design_categories" on public.design_categories for se
 drop policy if exists "admin all design_categories" on public.design_categories;
 create policy "admin all design_categories" on public.design_categories for all to authenticated using (true) with check (true);
 alter table public.designs add column if not exists category_id bigint references public.design_categories(id) on delete set null;
+
+-- ---------- READY-MADE STORE (Feature B) ----------
+-- Pre-made products you stock & sell directly (not customized). Ordered through the
+-- same place_order RPC via items:[{productId, qty}]; price is read server-side here.
+create table if not exists public.product_categories (
+  id bigint generated always as identity primary key,
+  name text not null unique, sort int default 0, active boolean default true, created_at timestamptz default now()
+);
+alter table public.product_categories enable row level security;
+drop policy if exists "public read product_categories" on public.product_categories;
+create policy "public read product_categories" on public.product_categories for select to anon, authenticated using (true);
+drop policy if exists "admin all product_categories" on public.product_categories;
+create policy "admin all product_categories" on public.product_categories for all to authenticated using (true) with check (true);
+
+create table if not exists public.readymade_products (
+  id          bigint generated always as identity primary key,
+  name        text not null,
+  price       int  not null default 0,
+  old_price   int,                         -- optional "was" price for a discount badge
+  description text default '',
+  category_id bigint references public.product_categories(id) on delete set null,
+  image_urls  text[] default '{}',          -- one or more product photos (designs bucket, products/ path)
+  model_fit   text default '',              -- e.g. "iPhone 15 Pro" or "Fits most phones"
+  stock       int,                          -- null = not tracked
+  active      boolean default true,
+  sort        int  default 0,
+  created_at  timestamptz default now()
+);
+alter table public.readymade_products enable row level security;
+drop policy if exists "public read readymade_products" on public.readymade_products;
+create policy "public read readymade_products" on public.readymade_products for select to anon, authenticated using (true);
+drop policy if exists "admin all readymade_products" on public.readymade_products;
+create policy "admin all readymade_products" on public.readymade_products for all to authenticated using (true) with check (true);
 
 -- Demo gallery (demos.html), fully admin-managed. Categories are free-form and
 -- independent of the customize case_types. Each category can show an "Order now"
