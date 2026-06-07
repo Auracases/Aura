@@ -340,12 +340,26 @@
 
   .radio-row{display:flex;flex-direction:column;gap:9px;}
   .radio{
-    display:flex;align-items:center;gap:10px;border:2px solid var(--ink);border-radius:12px;
-    padding:13px;background:#FFFDF8;cursor:pointer;font-weight:600;font-size:.9rem;min-height:48px;
+    display:flex;align-items:center;gap:13px;border:2px solid var(--ink);border-radius:12px;
+    padding:13px 14px;background:#FFFDF8;cursor:pointer;font-weight:600;font-size:.9rem;min-height:50px;
   }
-  .radio input{width:20px;height:20px;accent-color:var(--accent);flex-shrink:0;}
+  .radio input{width:20px;height:20px;accent-color:var(--accent);flex:0 0 20px;margin:0;}
+  .radio span{flex:1;min-width:0;}
   .radio b{color:var(--green);font-weight:800;}
   .radio:has(input:checked){border-color:var(--accent);background:#FFF1EC;box-shadow:2px 2px 0 var(--accent);}
+
+  /* promo code row */
+  .promo-row{display:flex;gap:8px;margin:12px 0 4px;}
+  .promo-row input{flex:1;min-width:0;padding:12px 13px;border:2px solid var(--ink);border-radius:12px;
+    background:#FFFDF8;font:inherit;font-weight:600;text-transform:uppercase;}
+  .promo-row button{flex:0 0 auto;background:var(--ink);color:#fff;border:2px solid var(--ink);border-radius:12px;
+    padding:0 20px;font-weight:700;cursor:pointer;font-family:var(--font-body);}
+
+  /* checkout selected-case preview */
+  .co-prev{display:flex;gap:12px;align-items:center;border:2px solid var(--ink);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:12px;margin-bottom:14px;background:#fff;}
+  .co-prev .co-thumb{width:64px;height:84px;border-radius:10px;border:1.5px solid var(--ink);
+    background:#eee center/cover no-repeat;flex:0 0 64px;}
 
   .submit-err{background:var(--red-bg);border:1.5px dashed #C8502B;border-radius:11px;padding:11px 12px;margin-top:14px;color:#8C2F12;font-size:.82rem;font-weight:600;line-height:1.45;}
   .big-btn.loading{position:relative;color:transparent;}
@@ -368,7 +382,6 @@
   <div class="head-in">
     <div class="logo">Case<span>Bari</span><small>তোমার ফোন, তোমার স্টাইল</small></div>
     <div style="display:flex;align-items:center;gap:8px">
-      <a href="shop.html" style="text-decoration:none;color:var(--ink);font-weight:700;font-size:.82rem;border:2px solid var(--ink);border-radius:12px;padding:8px 12px;background:#fff">Shop</a>
       <a href="demos.html" style="text-decoration:none;color:var(--ink);font-weight:700;font-size:.82rem;border:2px solid var(--ink);border-radius:12px;padding:8px 12px;background:#fff">Demos</a>
       <button class="cart-btn" id="cartBtn">Cart <span class="cart-count" id="cartCount">0</span></button>
     </div>
@@ -452,7 +465,7 @@
     <div id="designPreview" class="design-preview"></div>
 
     <div class="summary" id="summary"></div>
-    <button class="big-btn" id="addBtn" disabled>Add to cart</button>
+    <button class="big-btn" id="addBtn" disabled>Order now</button>
   </section>
 
   <footer>
@@ -473,17 +486,19 @@
 
   <!-- ===== VIEW: CHECKOUT ===== -->
   <div class="view" id="checkoutView" style="display:none;">
-    <button class="back-btn" id="backToCart">← Back to cart</button>
-    <h3>Checkout</h3>
+    <button class="back-btn" id="backToCart">← Back</button>
+    <h3>Confirm your order</h3>
+
+    <!-- selected case preview -->
+    <div id="checkoutPreview"></div>
 
     <!-- bill summary -->
     <div class="bill" id="billBox"></div>
 
     <!-- promo code -->
-    <div id="promoRow" style="display:flex;gap:8px;margin:10px 0 4px;">
-      <input type="text" id="promoInput" placeholder="Promo code" autocomplete="off"
-             style="flex:1;text-transform:uppercase;" />
-      <button type="button" id="applyPromo" class="back-btn" style="white-space:nowrap;">Apply</button>
+    <div id="promoRow" class="promo-row">
+      <input type="text" id="promoInput" placeholder="Promo code" autocomplete="off" />
+      <button type="button" id="applyPromo">Apply</button>
     </div>
     <div id="promoMsg" style="font-size:.85rem;min-height:1.1em;margin-bottom:6px;"></div>
 
@@ -1082,21 +1097,39 @@ function refreshSummary(){
   s.classList.add("show");
 }
 
-$("addBtn").onclick = () => {
-  state.cart.push({
-    model: state.model.name,
-    caseTypeId: state.caseType.id,
-    caseType: state.caseType.name,
-    price: state.caseType.price,
-    design: state.design.name,
-    designKind: state.design.kind,
+function orderItem(){
+  return {
+    model: state.model.name, caseTypeId: state.caseType.id, caseType: state.caseType.name,
+    price: state.caseType.price, design: state.design.name, designKind: state.design.kind,
     designImg: state.design.kind === "preset" ? (state.design.image_url || null) : null,
-    designUrl: state.design.kind === "upload" ? state.design.url : null,
-    name: state.name,
-  });
-  state.promo = null;   // cart changed -> drop any applied promo
+    designUrl: state.design.kind === "upload" ? state.design.url : null, name: state.name
+  };
+}
+// selected-case preview shown at the top of the order form
+function renderCheckoutPreview(){
+  const box = $("checkoutPreview"), it = state.cart[0]; if(!box) return;
+  if(!it){ box.innerHTML = ""; return; }
+  const img = it.designImg || it.designUrl || "";
+  box.innerHTML = `<div class="co-prev"><div class="co-thumb" style="background-image:url('${img}')"></div>
+    <div style="flex:1"><div style="font-weight:800">${escapeHtml(it.model)}</div>
+      <div class="hint" style="margin-top:2px">${escapeHtml(it.caseType)} · ${it.designKind === "upload" ? "your photo" : "design"}</div>
+      <div style="font-weight:800;margin-top:4px">${taka(it.price)}</div></div></div>`;
+}
+// open the order form directly (no cart step)
+function openCheckout(){
+  $("dInside").textContent  = taka(deliveryFor("insideDhaka"));
+  $("dOutside").textContent = taka(deliveryFor("outsideDhaka"));
+  $("promoInput").value = ""; $("promoMsg").textContent = "";
+  renderCheckoutPreview(); renderBill();
+  drawer.classList.add("show"); overlay.classList.add("show");
+  showView("checkout");
+}
+$("addBtn").onclick = () => {
+  if(!(state.model && state.caseType && state.design)) return;
+  state.cart = [orderItem()];   // single-item order — straight to the form
+  state.promo = null;
   $("cartCount").textContent = state.cart.length;
-  showToast("Added to cart ✓");
+  openCheckout();
 };
 
 function showToast(msg){
@@ -1178,16 +1211,8 @@ function storeDiscount(sub){
 }
 
 /* open checkout from cart */
-$("checkoutBtn").onclick = () => {
-  // seed the live delivery labels on the radios
-  $("dInside").textContent  = taka(deliveryFor("insideDhaka"));
-  $("dOutside").textContent = taka(deliveryFor("outsideDhaka"));
-  // reset promo UI for a fresh checkout
-  $("promoInput").value = ""; $("promoMsg").textContent = "";
-  renderBill();
-  showView("checkout");
-};
-$("backToCart").onclick = () => showView("cart");
+$("checkoutBtn").onclick = openCheckout;   // cart path also uses the same checkout opener
+$("backToCart").onclick = () => { drawer.classList.remove("show"); overlay.classList.remove("show"); };  // close → back to selection
 
 /* ---------- promo code ---------- */
 $("applyPromo").onclick = async () => {
