@@ -288,7 +288,7 @@ begin
   msg := '🛒 New order ' || NEW.order_id || E'\n👤 ' || coalesce(NEW.name,'') || ' · ' || coalesce(NEW.mobile,'')
        || E'\n' || coalesce(items_txt,'') || E'\n💵 ৳' || NEW.total || ' · ' || coalesce(NEW.payment_method,'')
        || E'\n📍 ' || coalesce(NEW.area,'') || ' — ' || coalesce(NEW.address,'')
-       || case when coalesce(nc.admin_url,'') <> '' then E'\n🔗 ' || nc.admin_url || '?order=' || NEW.order_id else '' end;
+       || case when coalesce(s.admin_url,'') <> '' then E'\n🔗 ' || s.admin_url || '?order=' || NEW.order_id else '' end;
   if coalesce(s.telegram_token,'') <> '' and coalesce(s.telegram_chat,'') <> '' then
     begin perform net.http_post(
       url := 'https://api.telegram.org/bot' || s.telegram_token || '/sendMessage',
