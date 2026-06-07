@@ -880,7 +880,13 @@ function renderDesigns(){
 
   const up = document.createElement("div");
   up.className = "design upload-tile";
-  up.innerHTML = `<div class="art">📷<span class="up-label">Upload your<br>own photo</span></div>`;
+  if(state.design && state.design.kind === "upload"){
+    up.classList.add("selected");
+    up.innerHTML = `<div class="art" style="background-image:url('${state.design.url}');background-size:cover;background-position:center"></div>
+                    <div class="d-name">Your photo ✓ — tap to change</div>`;
+  } else {
+    up.innerHTML = `<div class="art">📷<span class="up-label">Upload your<br>own photo</span></div>`;
+  }
   up.onclick = () => $("fileInput").click();
   grid.appendChild(up);
 
@@ -1052,9 +1058,8 @@ $("fileInput").addEventListener("change", e => {
         warn.classList.remove("show");
       }
       state.design = {kind:"upload", name:"Your photo", url, w:img.naturalWidth, h:img.naturalHeight};
-      document.querySelectorAll(".design").forEach(el=>el.classList.remove("selected"));
-      document.querySelector(".upload-tile").classList.add("selected");
-      renderDesignBanner();   // hide the catalog-design banner (uploads have no share link)
+      renderDesigns();         // rebuild grid so the upload tile shows the uploaded photo + selected
+      renderDesignBanner();    // hide the catalog-design banner (uploads have no share link)
       refreshSummary();
     };
     img.src = url;
