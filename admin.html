@@ -860,10 +860,10 @@ async function loadSync(){
     };
     row.querySelector(".s-run").onclick = async (e) => {
       e.target.disabled = true; e.target.textContent = "Running…";
-      const { data: res, error: err } = await sb.functions.invoke("sync", { body:{ source:s.key, force:true } });
+      const { data: res, error: err } = await sb.rpc("run_sync", { p_source: s.key, p_force: true });
       e.target.disabled = false; e.target.textContent = "Run now";
       if(err){ alert("Sync failed: " + err.message); }
-      else { alert(res?.status || "Done"); loadSync(); }
+      else { alert(res || "Done"); loadSync(); }
     };
     box.appendChild(row);
   });

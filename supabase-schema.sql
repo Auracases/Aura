@@ -311,9 +311,55 @@ begin
   return n;
 end $$;
 
--- Only the service role (used by the Edge Function) calls these. Lock out anon/authenticated.
+-- The inner RPCs are only ever called by run_sync (security definer, runs as
+-- owner), so lock them out of anon/authenticated direct calls.
 revoke all on function public.sync_master_models(jsonb) from anon, authenticated;
 revoke all on function public.sync_sheet_avail(jsonb)   from anon, authenticated;
+
+-- One-call sync used by both the admin "Run now" button and pg_cron. Fetches the
+-- source URL server-side (http extension), applies it via the inner RPCs, and
+-- records last_run_at/last_status. p_force=true ignores the enabled+frequency gate
+-- (the admin button); cron passes false so each source only runs when due.
+-- Requires: create extension if not exists http with schema extensions;
+create or replace function public.run_sync(p_source text, p_force boolean default false)
+returns text language plpgsql security definer set search_path = public, extensions as $$
+declare s public.sync_sources; body jsonb; n int; due boolean; msg text;
+begin
+  select * into s from public.sync_sources where key = p_source;
+  if not found then return 'unknown source'; end if;
+  due := p_force or (s.enabled and (s.last_run_at is null
+        or now() - s.last_run_at >= make_interval(days => greatest(coalesce(s.frequency_days,1),1))));
+  if not due then return 'skipped (not due)'; end if;
+
+  begin
+    body := (extensions.http_get(s.source_url)).content::jsonb;
+  exception when others then
+    update public.sync_sources set last_run_at = now(), last_status = 'ERROR fetch: '||SQLERRM where key = p_source;
+    return 'ERROR: fetch failed';
+  end;
+
+  if p_source = 'gsm' then
+    n := public.sync_master_models(body);
+    msg := 'inserted ' || n || ' new models';
+  elsif p_source = 'sheet' then
+    n := public.sync_sheet_avail(
+      (select jsonb_agg(jsonb_build_object(
+         'brand',    e->>'brand',
+         'model',    e->>'modelName',
+         'avail_2d', lower(coalesce(e->>'availability2D','')) = 'available',
+         'avail_3d', lower(coalesce(e->>'availability3D','')) = 'available'))
+       from jsonb_array_elements(body) e));
+    msg := 'updated ' || n || ' availability rows';
+  else
+    return 'bad source';
+  end if;
+
+  update public.sync_sources set last_run_at = now(), last_status = msg where key = p_source;
+  return msg;
+end $$;
+-- Admin (authenticated) may trigger a sync from the browser; the public cannot.
+revoke all on function public.run_sync(text, boolean) from anon;
+grant execute on function public.run_sync(text, boolean) to authenticated;
 
 -- ---------- STORAGE BUCKETS ----------
 insert into storage.buckets (id, name, public) values ('designs','designs',true)

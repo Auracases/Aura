@@ -97,36 +97,28 @@ separate layer updated by two syncs (GSM master ~monthly, availability sheet
      'https://cdn.jsdelivr.net/gh/OWNER/REPO@main/data/phones-master.json' where key='gsm';
    update public.sync_sources set source_url = 'PASTE_APPS_SCRIPT_URL' where key='sheet';
    ```
-3. **Enable extensions** — SQL Editor:
+3. **Enable extensions** — SQL Editor (no CLI, no Edge Function needed — the sync
+   runs entirely in Postgres via `run_sync()`):
    ```sql
-   create extension if not exists pg_cron;
-   create extension if not exists pg_net;
+   create extension if not exists http   with schema extensions;  -- fetch source URLs
+   create extension if not exists pg_cron;                        -- daily schedule
    ```
-4. **Deploy the Edge Function** — install the Supabase CLI, then:
-   ```bash
-   supabase functions deploy sync --project-ref <PROJECT_REF>
-   supabase secrets set CRON_SECRET=<a-long-random-string> --project-ref <PROJECT_REF>
-   ```
-   (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.)
-5. **Schedule the daily cron** — SQL Editor, replacing `<PROJECT_REF>` and `<CRON_SECRET>`:
+4. **Schedule the daily cron** — SQL Editor. `run_sync` self-gates on each source's
+   `frequency_days`, so a daily fire only runs a source when it's actually due:
    ```sql
    select cron.schedule('phone-sync-daily', '0 3 * * *', $$
-     select net.http_post(
-       url := 'https://<PROJECT_REF>.functions.supabase.co/sync',
-       headers := '{"content-type":"application/json","x-cron-secret":"<CRON_SECRET>"}'::jsonb,
-       body := '{"source":"gsm"}'::jsonb);
-     select net.http_post(
-       url := 'https://<PROJECT_REF>.functions.supabase.co/sync',
-       headers := '{"content-type":"application/json","x-cron-secret":"<CRON_SECRET>"}'::jsonb,
-       body := '{"source":"sheet"}'::jsonb);
+     select public.run_sync('sheet');
+     select public.run_sync('gsm');
    $$);
    ```
-   The function self-gates on each source's `frequency_days`, so the daily fire
-   only actually runs a source when it's due.
-6. **First seed** — in admin.html → Phones tab → "Run now". Run the **Availability
+5. **First seed** — in admin.html → Phones tab → "Run now". Run the **Availability
    sheet first** (marks the existing models `on_sheet=true`), **then** GSM master
    (adds the rest of the catalog as search-only). GSM seeds the master list; the
    sheet layers availability on top.
+
+> The admin "Run now" button calls `run_sync(source, force:=true)` directly (a
+> security-definer Postgres function). No Edge Function / CLI / secrets required.
+> `supabase/functions/sync/` remains in the repo as an optional alternative.
 
 Manual edits in the Phones tab pin a model (`manual_override`); the sheet sync
 skips pinned rows. Click "Release" to let a model rejoin sheet sync.
