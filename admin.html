@@ -389,6 +389,15 @@
         <button id="dmAddBtn" style="margin-bottom:0">Add demo</button>
       </div>
       <div id="dmMsg" class="muted" style="font-size:.82rem;margin-top:8px"></div>
+
+      <h3 style="margin-top:18px">Bulk upload images</h3>
+      <div class="muted" style="font-size:.82rem;margin-bottom:10px">Pick many images at once — each becomes an Active demo in the chosen category, no caption. (Videos: add one at a time above.)</div>
+      <div class="wrap-row" style="align-items:flex-end">
+        <div style="flex:1 1 150px"><label>Category</label><select id="dmBulkCat"></select></div>
+        <div style="flex:1 1 200px"><label>Images</label><input type="file" id="dmBulkFiles" accept="image/*" multiple /></div>
+        <button id="dmBulkBtn" style="margin-bottom:0">Bulk upload</button>
+      </div>
+      <div id="dmBulkMsg" class="muted" style="font-size:.82rem;margin-top:8px"></div>
     </div>
     <div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
       <label style="margin:0">Filter</label>
@@ -1239,6 +1248,7 @@ async function loadDemos(){
   // category picker for the add form + filter
   $("dmCat").innerHTML = DCATS.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")
     || `<option value="">(create a category first)</option>`;
+  $("dmBulkCat").innerHTML = $("dmCat").innerHTML;
   const prevFilter = $("dmFilter").value;
   $("dmFilter").innerHTML = `<option value="">All categories</option>` + DCATS.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
   $("dmFilter").value = prevFilter;
@@ -1331,6 +1341,38 @@ $("dmAddBtn").onclick = async () => {
     renderDemoItems();
   }catch(err){ msg.style.color = "var(--bad)"; msg.textContent = err.message || "Couldn't add"; }
   $("dmAddBtn").disabled = false;
+};
+
+/* bulk upload: each image -> an Active demo (image) in the chosen category */
+$("dmBulkBtn").onclick = async () => {
+  const msg = $("dmBulkMsg");
+  const category_id = $("dmBulkCat").value;
+  if(!category_id){ msg.style.color = "var(--bad)"; msg.textContent = "Create/select a category first."; return; }
+  const files = [...$("dmBulkFiles").files];
+  if(!files.length){ msg.style.color = "var(--bad)"; msg.textContent = "Pick one or more images."; return; }
+  $("dmBulkBtn").disabled = true;
+  let done = 0, failed = 0;
+  for(let i = 0; i < files.length; i++){
+    msg.style.color = "var(--muted)"; msg.textContent = `Uploading ${i+1}/${files.length}…`;
+    try{
+      const blob = await dataUrlToBlob(await compressImage(await fileToDataUrl(files[i])));
+      const path = `demos/${Date.now()}-${i}.jpg`;
+      const { error: upErr } = await sb.storage.from("designs").upload(path, blob, { contentType:"image/jpeg", upsert:false });
+      if(upErr) throw upErr;
+      const url = sb.storage.from("designs").getPublicUrl(path).data.publicUrl;
+      const { error } = await sb.from("demos").insert({
+        category_id: Number(category_id), media_type:"image", url, case_key:"",
+        caption:"", order_url:"", sort:0, active:true
+      });
+      if(error) throw error;
+      done++;
+    }catch(_){ failed++; }
+  }
+  $("dmBulkFiles").value = "";
+  msg.style.color = failed ? "var(--bad)" : "var(--ok)";
+  msg.textContent = `Uploaded ${done}/${files.length}${failed?` · ${failed} failed`:""} ✓`;
+  $("dmBulkBtn").disabled = false;
+  renderDemoItems();
 };
 
 let dragId = null;

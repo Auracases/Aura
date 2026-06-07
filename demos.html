@@ -86,6 +86,10 @@
   .foot-policy summary::-webkit-details-marker{display:none;}
   .foot-policy ul{margin:8px 0 0;padding-left:18px;}
   .foot-policy li{font-size:.72rem;color:var(--ink-soft);margin-bottom:5px;}
+  .announce-banner{display:none;background:#FFF4D6;color:var(--ink);border:2px solid var(--ink);
+    border-radius:14px;box-shadow:2px 2px 0 var(--ink);padding:12px 16px;margin-bottom:16px;
+    font-weight:600;text-align:center;font-size:.92rem;line-height:1.5;white-space:pre-line;}
+  .announce-banner.show{display:block;}
 </style>
 </head>
 <body>
@@ -97,6 +101,7 @@
   </header>
 
   <div class="wrap">
+    <div id="announceBanner" class="announce-banner"></div>
     <section class="hero">
       <h1>See the <em>cases</em> in action.</h1>
       <p>Pick a case type to view real photos & videos. Then head over to order yours.</p>
@@ -151,8 +156,19 @@ async function load(){
       const { data } = await sb.from("demos").select("*").eq("active", true).order("sort").limit(3000);
       DEMOS = data || [];
     }catch(_){ DEMOS = []; }
+    try{
+      const { data: s } = await sb.from("settings").select("announcement,announcement_active").eq("id",1).single();
+      renderAnnounce(s);
+    }catch(_){}
   }
   renderPills();
+}
+
+function renderAnnounce(s){
+  const b = $("announceBanner"); if(!b) return;
+  const t = s && s.announcement ? String(s.announcement).trim() : "";
+  if(s && s.announcement_active && t){ b.textContent = "📢 " + t; b.classList.add("show"); }
+  else b.classList.remove("show");
 }
 
 function renderPills(){
