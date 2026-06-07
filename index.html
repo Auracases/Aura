@@ -475,8 +475,9 @@ const sb = (typeof supabase !== "undefined" && CONFIG.SUPABASE_URL && CONFIG.SUP
   ? supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
   : null;
 
-let PHONES   = [];                              // [{name, search_key, d2, d3, aliases:[]}]
-let AVAIL    = new Map();                        // search_key -> {d2, d3}
+let PHONES   = [];                              // master models for SEARCH [{name, search_key, d2, d3, aliases:[]}]
+let AVAIL    = new Map();                        // exact search_key -> {d2, d3}
+let AVAIL_GROUPS = [];                           // sheet fitment-groups [{key, d2, d3}] for fuzzy availability lookup
 let CASES    = CONFIG.FALLBACK.CASE_TYPES;       // case types (from DB)
 let DESIGNS  = CONFIG.FALLBACK.DESIGNS;          // designs (from DB)
 let SETTINGS = {
@@ -486,8 +487,22 @@ let SETTINGS = {
   store_discount_active:false, store_discount_type:"none", store_discount_value:0, store_discount_label:""
 };
 
-// Availability for the selected phone. Unknown model -> only TPU/UV.
-function availFor(name){ return AVAIL.get(norm(name||"")) || {d2:false, d3:false}; }
+// Availability (2D/3D) for a model. The sheet stores case-fitment GROUPS — one
+// row lists several models that share a case (e.g. "OPPO A15/ A15S/ A35"), so its
+// search_key is a blob of concatenated model keys. We resolve a model by: exact
+// key first, else a substring match against the group blobs (group contains the
+// model key, or — for brand-less sheet rows like "iphone11" — the model key
+// contains the group key). Unknown model -> only TPU/UV.
+function availFor(name){
+  const k = norm(name || "");
+  if(!k) return {d2:false, d3:false};
+  if(AVAIL.has(k)) return AVAIL.get(k);
+  for(const g of AVAIL_GROUPS){
+    if(g.key.length < 5) continue;                 // skip junk/too-short group keys
+    if(g.key.includes(k) || k.includes(g.key)) return {d2:g.d2, d3:g.d3};
+  }
+  return {d2:false, d3:false};
+}
 
 /* ---- phones cache: {ts, data}, valid for AVAIL_TTL_MS ---- */
 function readCache(key){
@@ -508,22 +523,34 @@ function writeCache(key, data){
 }
 
 function indexPhones(rows){
-  PHONES = (rows||[]).map(p => ({
+  rows = rows || [];
+  const master = [], groups = [];
+  for(const p of rows){
+    const rec = {
+      name: p.model_name, brand: p.brand || "", search_key: p.search_key || norm(p.model_name),
+      d2: !!p.avail_2d, d3: !!p.avail_3d, aliases: []
+    };
+    (p.on_sheet ? groups : master).push(rec);   // on_sheet rows are the availability groups
+  }
+  // Search the clean master models. If none loaded (e.g. only the sheet is
+  // seeded), fall back to everything so search still works.
+  PHONES = master.length ? master : rows.map(p => ({
     name: p.model_name, brand: p.brand || "", search_key: p.search_key || norm(p.model_name),
     d2: !!p.avail_2d, d3: !!p.avail_3d, aliases: []
   }));
+  AVAIL_GROUPS = groups.map(g => ({ key: g.search_key, d2: g.d2, d3: g.d3 }));
   AVAIL = new Map();
-  PHONES.forEach(p => AVAIL.set(p.search_key, {d2:p.d2, d3:p.d3}));
+  AVAIL_GROUPS.forEach(g => AVAIL.set(g.key, {d2:g.d2, d3:g.d3}));
 }
 
 async function loadPhones(){
-  let rows = readCache("cb_phones");
+  let rows = readCache("cb_phones_v2");
   if(!rows && sb){
     try{
-      const { data, error } = await sb.from("phones").select("brand,model_name,search_key,avail_2d,avail_3d").limit(5000);
+      const { data, error } = await sb.from("phones").select("brand,model_name,search_key,avail_2d,avail_3d,on_sheet").limit(5000);
       if(error) throw error;
-      rows = data; writeCache("cb_phones", rows);
-    }catch(_){ rows = readStale("cb_phones"); }
+      rows = data; writeCache("cb_phones_v2", rows);
+    }catch(_){ rows = readStale("cb_phones_v2"); }
   }
   indexPhones(rows || []);
 }
