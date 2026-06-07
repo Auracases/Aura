@@ -35,8 +35,8 @@ const CONFIG = {
     DELIVERY: { insideDhaka: 70, outsideDhaka: 130 },
     BKASH_NUMBER: "01XXXXXXXXX",
     CASE_TYPES: [
-      { id:"tpu", name:"TPU Soft",     price:249, always_available:true,  requires:null, descr:"Flexible, slim, shock-friendly" },
-      { id:"uv",  name:"UV Printed",   price:349, always_available:true,  requires:null, descr:"Vivid print, glossy finish" },
+      { id:"tpu", name:"(UV) TPU Soft",          price:249, always_available:true,  requires:null, descr:"UV-printed, flexible & slim" },
+      { id:"uv",  name:"Premium Silicone Cases", price:349, always_available:true,  requires:null, descr:"Soft-touch silicone, premium feel" },
       { id:"d2",  name:"2D Hard Case", price:449, always_available:false, requires:"2d", descr:"Hard back, flat print" },
       { id:"d3",  name:"3D Hard Case", price:549, always_available:false, requires:"3d", descr:"Print wraps the edges" },
     ],

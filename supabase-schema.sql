@@ -92,8 +92,8 @@ create table if not exists public.orders (
 
 -- ---------- SEED ----------
 insert into public.case_types (id,name,price,always_available,requires,descr,sort) values
-  ('tpu','TPU Soft',     249, true,  null, 'Flexible, slim, shock-friendly', 1),
-  ('uv', 'UV Printed',   349, true,  null, 'Vivid print, glossy finish',     2),
+  ('tpu','(UV) TPU Soft',         249, true,  null, 'UV-printed, flexible & slim',      1),
+  ('uv', 'Premium Silicone Cases', 349, true,  null, 'Soft-touch silicone, premium feel', 2),
   ('d2', '2D Hard Case', 449, false, '2d', 'Hard back, flat print',          3),
   ('d3', '3D Hard Case', 549, false, '3d', 'Print wraps the edges',          4)
 on conflict (id) do nothing;
