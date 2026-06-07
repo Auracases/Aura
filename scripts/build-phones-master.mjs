@@ -1,5 +1,8 @@
-// Offline generator: raw GSMArena-derived dataset -> data/phones-master.json
-// Usage: node scripts/build-phones-master.mjs <raw.json|raw.csv>
+// Offline generator: curated BD-market data -> data/phones-master.json
+// Primary source: data/bd-current-models.json (curated from mobiledokan.com + knowledge, 2021-2026)
+// Supplements: data/local-brands-supplement.json, data/recent-models-supplement.json
+// Usage: node scripts/build-phones-master.mjs
+//   Optional: node scripts/build-phones-master.mjs <extra-raw.json|raw.csv>  (merged in addition)
 // raw rows need at least: brand, model. Optional: year (number or "2023").
 import fs from "node:fs";
 import path from "node:path";
@@ -11,7 +14,7 @@ export function norm(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]/g
 const ALLOWED = new Set([
   "samsung","xiaomi","redmi","poco","realme","vivo","oppo","apple","iphone",
   "infinix","tecno","itel","oneplus","motorola","nokia","honor","huawei",
-  "symphony","walton"
+  "symphony","walton","google","pixel"
 ].map(norm));
 
 function brandAllowed(brand, model){
@@ -61,16 +64,28 @@ function readRaw(file){
 }
 
 function main(){
-  const rawFile = process.argv[2];
-  if(!rawFile){ console.error("usage: build-phones-master.mjs <raw.json|raw.csv>"); process.exit(1); }
-  const raw = readRaw(rawFile);
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const supPath = path.join(__dirname, "..", "data", "local-brands-supplement.json");
+  const dataDir = path.join(__dirname, "..", "data");
+
+  // Primary source: curated BD-market list (replaces the stale raw GSMArena dump).
+  const bdPath = path.join(dataDir, "bd-current-models.json");
+  const bdCurrent = JSON.parse(fs.readFileSync(bdPath, "utf8"));
+
+  // Supplements kept for any models not already in bdCurrent.
+  const supPath = path.join(dataDir, "local-brands-supplement.json");
   const supplement = JSON.parse(fs.readFileSync(supPath, "utf8"));
-  const recPath = path.join(__dirname, "..", "data", "recent-models-supplement.json");
+  const recPath = path.join(dataDir, "recent-models-supplement.json");
   const recent = JSON.parse(fs.readFileSync(recPath, "utf8"));
-  const merged = normalizeRows([...raw, ...supplement, ...recent], { minYear: 2018 });
-  const outPath = path.join(__dirname, "..", "data", "phones-master.json");
+
+  // Optional extra raw file (legacy path, still usable for one-off additions).
+  const rawFile = process.argv[2];
+  const extra = rawFile ? readRaw(rawFile) : [];
+  if(rawFile) console.log(`Merging extra raw file: ${rawFile} (${extra.length} rows)`);
+
+  // bd-current-models.json rows have no year field; treat as "current" (year unknown = kept).
+  // Supplements may have year; minYear:2019 prunes very old clutter but keeps unknowns.
+  const merged = normalizeRows([...bdCurrent, ...supplement, ...recent, ...extra], { minYear: 2019 });
+  const outPath = path.join(dataDir, "phones-master.json");
   fs.writeFileSync(outPath, JSON.stringify(merged, null, 0));
   console.log(`Wrote ${merged.length} models -> ${outPath}`);
 }
