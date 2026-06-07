@@ -16,6 +16,7 @@
 (function () {
   var GA_ID        = "G-TR40T51EC7";        // Google Analytics 4 Measurement ID
   var FB_PIXEL_ID  = "1003325708911348";    // Meta (Facebook) Pixel ID
+  var CLARITY_ID   = "x3gzriv05s";          // Microsoft Clarity project ID (heatmaps + session replay)
 
   /* ---- Google Analytics 4 (gtag.js) ---- */
   if (GA_ID) {
@@ -41,6 +42,21 @@
     }(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
     window.fbq("init", FB_PIXEL_ID);
     window.fbq("track", "PageView");
+  }
+
+  /* ---- Microsoft Clarity (heatmaps + session replay) ----
+     Lazy-loaded ~2.5s after the page settles so it never competes with
+     content/images on first paint. Async, masks text/inputs by default. */
+  if (CLARITY_ID) {
+    var loadClarity = function () {
+      (function (c, l, a, r, i, t, y) {
+        c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments); };
+        t = l.createElement(r); t.async = 1; t.src = "https://www.clarity.ms/tag/" + i;
+        y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
+      })(window, document, "clarity", "script", CLARITY_ID);
+    };
+    if (document.readyState === "complete") setTimeout(loadClarity, 2500);
+    else window.addEventListener("load", function () { setTimeout(loadClarity, 2500); });
   }
 
   /* ---- Standard Meta Pixel event names (everything else = custom) ---- */
