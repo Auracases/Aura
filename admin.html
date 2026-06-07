@@ -58,6 +58,7 @@
   .d-body .nm{font-weight:700}
   .d-body textarea{margin-top:7px;min-height:42px;resize:vertical}
   .d-actions{display:flex;gap:8px;margin-top:9px}
+  .bulk-bar{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:9px 12px;background:#f4f0ff;border-radius:10px;flex-wrap:wrap}
   .d-actions button{padding:6px 10px;font-size:.85rem;flex:1}
 
   /* orders */
@@ -458,8 +459,12 @@ async function loadDesigns(){
              : fil ? data.filter(d => String(d.category_id) === fil)
              : data;
   if(!list.length){ box.innerHTML = `<div class="loading">No designs${fil?" in this category":" yet — add one above"}.</div>`; return; }
-  box.innerHTML = `<div class="d-grid"></div>`;
+  box.innerHTML = `
+    <div class="bulk-bar"><label class="row" style="gap:6px;margin:0"><input type="checkbox" id="dSelAll" style="width:auto" /> Select all</label>
+      <span class="grow"></span><button class="ghost" id="dSaveAll">Save all</button><button class="danger" id="dDelSel">Delete selected</button></div>
+    <div class="d-grid"></div>`;
   const grid = box.querySelector(".d-grid");
+  const refs = [];
   list.forEach(d => {
     const card = document.createElement("div");
     card.className = "d-card";
@@ -467,7 +472,7 @@ async function loadDesigns(){
       <div class="d-thumb" style="background-image:url('${esc(d.image_url)}')"></div>
       <div class="d-body">
         <div class="row" style="justify-content:space-between">
-          <input value="${esc(d.name)}" class="f-name" style="font-weight:700;border:none;padding:2px 0" />
+          <label class="row" style="gap:6px;margin:0"><input type="checkbox" class="d-pick" style="width:auto" /><input value="${esc(d.name)}" class="f-name" style="font-weight:700;border:none;padding:2px 0" /></label>
           <span class="pill ${d.active?"p-on":"p-off"}">${d.active?"Active":"Hidden"}</span>
         </div>
         <textarea class="f-context" placeholder="Context">${esc(d.context)}</textarea>
@@ -512,7 +517,33 @@ async function loadDesigns(){
       await sb.from("designs").delete().eq("id", d.id); loadDesigns();
     };
     grid.appendChild(card);
+    refs.push({ card, d });
   });
+
+  $("dSelAll").onclick = (e) => refs.forEach(r => r.card.querySelector(".d-pick").checked = e.target.checked);
+  $("dSaveAll").onclick = async (e) => {
+    e.target.disabled = true; e.target.textContent = "Saving…";
+    for(const { card, d } of refs){
+      const cv = card.querySelector(".f-cat").value;
+      await sb.from("designs").update({
+        name: card.querySelector(".f-name").value.trim(),
+        context: card.querySelector(".f-context").value.trim(),
+        category_id: cv ? Number(cv) : null,
+        sort: Number(card.querySelector(".f-sort").value) || 0
+      }).eq("id", d.id);
+    }
+    e.target.textContent = "Saved all ✓"; setTimeout(()=>{ e.target.textContent = "Save all"; e.target.disabled = false; }, 1200);
+  };
+  $("dDelSel").onclick = async () => {
+    const picked = refs.filter(r => r.card.querySelector(".d-pick").checked);
+    if(!picked.length){ alert("Select designs first (tick the boxes)."); return; }
+    if(!confirm(`Delete ${picked.length} design(s)? This can't be undone.`)) return;
+    for(const { d } of picked){
+      const path = storagePath(d.image_url, "designs"); if(path) await sb.storage.from("designs").remove([path]);
+      await sb.from("designs").delete().eq("id", d.id);
+    }
+    loadDesigns();
+  };
 }
 function storagePath(url, bucket){
   const marker = "/public/" + bucket + "/";
@@ -1203,8 +1234,12 @@ async function renderDemoItems(){
   if(fil) data = data.filter(d => String(d.category_id) === fil);
   if(!data.length){ box.innerHTML = `<div class="loading">No demos${fil?" in this category":" yet — add one above"}.</div>`; return; }
   const catName = id => (DCATS.find(c => c.id === id)||{}).name || "—";
-  box.innerHTML = `<div class="d-grid"></div>`;
+  box.innerHTML = `
+    <div class="bulk-bar"><label class="row" style="gap:6px;margin:0"><input type="checkbox" id="dmSelAll" style="width:auto" /> Select all</label>
+      <span class="grow"></span><button class="ghost" id="dmSaveAll">Save all</button><button class="danger" id="dmDelSel">Delete selected</button></div>
+    <div class="d-grid"></div>`;
   const grid = box.querySelector(".d-grid");
+  const refs = [];
   data.forEach(d => {
     const card = document.createElement("div"); card.className = "d-card"; card.draggable = true; card.dataset.id = d.id;
     const thumb = d.media_type === "video"
@@ -1214,7 +1249,7 @@ async function renderDemoItems(){
       ${thumb}
       <div class="d-body">
         <div class="row" style="justify-content:space-between">
-          <b>⠿ ${esc(catName(d.category_id))}</b>
+          <label class="row" style="gap:6px;margin:0"><input type="checkbox" class="d-pick" style="width:auto" /><b>⠿ ${esc(catName(d.category_id))}</b></label>
           <span class="pill ${d.active?"p-on":"p-off"}">${d.active?"Active":"Hidden"} · ${esc(d.media_type)}</span>
         </div>
         <input value="${esc(d.caption)}" class="f-cap" placeholder="Caption" style="margin-top:7px" />
@@ -1246,7 +1281,31 @@ async function renderDemoItems(){
       await sb.from("demos").delete().eq("id", d.id); renderDemoItems();
     };
     grid.appendChild(card);
+    refs.push({ card, d });
   });
+
+  $("dmSelAll").onclick = (e) => refs.forEach(r => r.card.querySelector(".d-pick").checked = e.target.checked);
+  $("dmSaveAll").onclick = async (e) => {
+    e.target.disabled = true; e.target.textContent = "Saving…";
+    for(const { card, d } of refs){
+      await sb.from("demos").update({
+        caption: card.querySelector(".f-cap").value.trim(),
+        order_url: card.querySelector(".f-order").value.trim(),
+        show_order: card.querySelector(".f-show").checked
+      }).eq("id", d.id);
+    }
+    e.target.textContent = "Saved all ✓"; setTimeout(()=>{ e.target.textContent = "Save all"; e.target.disabled = false; }, 1200);
+  };
+  $("dmDelSel").onclick = async () => {
+    const picked = refs.filter(r => r.card.querySelector(".d-pick").checked);
+    if(!picked.length){ alert("Select demos first (tick the boxes)."); return; }
+    if(!confirm(`Delete ${picked.length} demo(s)?`)) return;
+    for(const { d } of picked){
+      const path = storagePath(d.url, "designs"); if(path) await sb.storage.from("designs").remove([path]);
+      await sb.from("demos").delete().eq("id", d.id);
+    }
+    renderDemoItems();
+  };
 
   // drag-to-reorder (mouse) → persists sort on drop
   grid.addEventListener("dragstart", e => { const c = e.target.closest(".d-card"); if(c){ dragId = c.dataset.id; c.style.opacity = ".4"; }});
