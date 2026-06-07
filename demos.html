@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Case Demos — CaseBari</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FBF5EA; --ink:#211C15; --ink-soft:#6E6557; --card:#FFFFFF;
+    --accent:#FF4B1F; --accent-dark:#D63A12; --green:#0B8C5D; --line:#211C15;
+    --radius:18px; --shadow:4px 4px 0 var(--ink);
+    --font-display:"Bricolage Grotesque", sans-serif; --font-body:"Hanken Grotesk", sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html{scroll-behavior:smooth;}
+  body{font-family:var(--font-body);background:var(--bg);
+    background-image:radial-gradient(rgba(33,28,21,.07) 1px, transparent 1px);background-size:22px 22px;
+    color:var(--ink);min-height:100vh;}
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px;}
+
+  header{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:2px solid var(--ink);}
+  .head-in{max-width:760px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .logo{font-family:var(--font-display);font-weight:800;font-size:1.45rem;letter-spacing:-.5px;line-height:1;}
+  .logo span{color:var(--accent);}
+  .logo small{display:block;font-family:var(--font-body);font-weight:500;font-size:.62rem;color:var(--ink-soft);letter-spacing:.05em;margin-top:2px;}
+  .order-btn{background:var(--accent);color:#fff;border:2px solid var(--ink);border-radius:12px;
+    padding:9px 16px;font-family:var(--font-body);font-weight:700;font-size:.85rem;cursor:pointer;text-decoration:none;box-shadow:2px 2px 0 var(--ink);}
+
+  .hero{padding:26px 0 6px;}
+  .hero h1{font-family:var(--font-display);font-weight:800;font-size:clamp(1.7rem,7vw,2.3rem);line-height:1.08;letter-spacing:-1px;}
+  .hero h1 em{font-style:normal;color:var(--accent);}
+  .hero p{color:var(--ink-soft);margin-top:8px;font-size:.95rem;}
+
+  /* pills */
+  .pills{display:flex;gap:9px;overflow-x:auto;padding:18px 0 6px;-webkit-overflow-scrolling:touch;}
+  .pill{flex-shrink:0;background:var(--card);border:2px solid var(--ink);border-radius:999px;
+    padding:9px 16px;font-weight:700;font-size:.9rem;cursor:pointer;font-family:var(--font-body);
+    color:var(--ink);transition:transform .1s ease;}
+  .pill:active{transform:scale(.96);}
+  .pill.active{background:var(--ink);color:#fff;}
+
+  .type-info{margin:10px 0 4px;}
+  .type-info .ti-name{font-family:var(--font-display);font-weight:700;font-size:1.2rem;}
+  .type-info .ti-sub{color:var(--ink-soft);font-size:.9rem;margin-top:2px;}
+  .type-info .ti-price{display:inline-block;margin-top:6px;background:#FFF1EC;color:var(--accent-dark);
+    border:1.5px solid var(--accent);border-radius:9px;padding:3px 10px;font-weight:700;font-size:.85rem;}
+
+  /* gallery */
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin:16px 0 60px;}
+  .media{position:relative;border:2px solid var(--ink);border-radius:14px;overflow:hidden;background:#EFE9DC;
+    box-shadow:var(--shadow);aspect-ratio:3/4;}
+  .media img,.media video{width:100%;height:100%;object-fit:cover;display:block;background:#EFE9DC;}
+  .media img{opacity:0;transition:opacity .4s ease;}
+  .media img.loaded{opacity:1;}
+  .media .cap{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.6));
+    color:#fff;font-size:.78rem;font-weight:600;padding:14px 10px 8px;}
+  .media .expand{position:absolute;top:6px;right:6px;background:rgba(255,255,255,.9);border:none;border-radius:8px;
+    width:30px;height:30px;font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .media .vtag{position:absolute;top:6px;left:6px;background:rgba(33,28,21,.8);color:#fff;border-radius:7px;
+    font-size:.68rem;font-weight:700;padding:2px 7px;letter-spacing:.03em;}
+  .empty{grid-column:1/-1;text-align:center;color:var(--ink-soft);padding:40px 0;font-weight:600;}
+  .loading{text-align:center;color:var(--ink-soft);padding:40px 0;font-weight:600;}
+
+  /* lightbox */
+  .lightbox{position:fixed;inset:0;background:rgba(20,16,30,.9);display:none;align-items:center;justify-content:center;z-index:200;padding:18px;cursor:zoom-out;}
+  .lightbox.show{display:flex;}
+  .lightbox img,.lightbox video{max-width:100%;max-height:90vh;border-radius:14px;border:2px solid #fff;box-shadow:0 8px 44px rgba(0,0,0,.5);background:#000;}
+</style>
+</head>
+<body>
+  <header>
+    <div class="head-in">
+      <div class="logo">Case<span>Bari</span><small>তোমার ফোন, তোমার স্টাইল</small></div>
+      <a class="order-btn" href="index.html">Order now →</a>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <section class="hero">
+      <h1>See the <em>cases</em> in action.</h1>
+      <p>Pick a case type to view real photos & videos. Then head over to order yours.</p>
+    </section>
+
+    <div class="pills" id="pills"></div>
+    <div class="type-info" id="typeInfo"></div>
+    <div class="gallery" id="gallery"><div class="loading">Loading…</div></div>
+  </div>
+
+  <div id="lightbox" class="lightbox"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const taka = n => "৳" + (n==null?0:n);
+const sb = (typeof supabase !== "undefined" && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_URL.startsWith("http"))
+  ? supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY) : null;
+
+// case types (+ a synthetic Custom pill); demos grouped by case_key
+let TYPES = [
+  { key:"tpu", name:"TPU Soft",   descr:"Flexible, slim, shock-friendly" },
+  { key:"uv",  name:"UV Printed", descr:"Vivid print, glossy finish" },
+  { key:"d2",  name:"2D Hard Case", descr:"Hard back, flat print" },
+  { key:"d3",  name:"3D Hard Case", descr:"Print wraps the edges" },
+];
+const CUSTOM = { key:"custom", name:"Custom / Your Photo", descr:"Your own photo or a chosen design", price:null };
+let DEMOS = [];
+let activeKey = null;
+
+async function load(){
+  if(sb){
+    try{
+      const { data: cts } = await sb.from("case_types").select("*").order("sort");
+      if(cts && cts.length) TYPES = cts.map(c => ({ key:c.id, name:c.name, descr:c.descr||"", price:c.price }));
+    }catch(_){}
+    try{
+      const { data } = await sb.from("demos").select("*").eq("active", true).order("sort").limit(2000);
+      DEMOS = data || [];
+    }catch(_){ DEMOS = []; }
+  }
+  renderPills();
+}
+
+function allTypes(){ return [...TYPES, CUSTOM]; }
+
+function renderPills(){
+  const box = $("pills"); box.innerHTML = "";
+  const types = allTypes();
+  // default to the first type that has demos, else the first type
+  if(!activeKey){
+    const withDemos = types.find(t => DEMOS.some(d => d.case_key === t.key));
+    activeKey = (withDemos || types[0]).key;
+  }
+  types.forEach(t => {
+    const b = document.createElement("button");
+    b.className = "pill" + (t.key === activeKey ? " active" : "");
+    b.textContent = t.name;
+    b.onclick = () => { activeKey = t.key; renderPills(); renderGallery(); };
+    box.appendChild(b);
+  });
+  renderGallery();
+}
+
+function renderGallery(){
+  const t = allTypes().find(x => x.key === activeKey) || allTypes()[0];
+  $("typeInfo").innerHTML = `
+    <div class="ti-name">${esc(t.name)}</div>
+    <div class="ti-sub">${esc(t.descr || "")}</div>
+    ${t.price != null ? `<div class="ti-price">from ${taka(t.price)}</div>` : ""}`;
+  const box = $("gallery");
+  const items = DEMOS.filter(d => d.case_key === activeKey);
+  if(!items.length){ box.innerHTML = `<div class="empty">No demos here yet — check back soon.</div>`; return; }
+  box.innerHTML = "";
+  items.forEach(d => {
+    const cell = document.createElement("div");
+    cell.className = "media";
+    if(d.media_type === "video"){
+      cell.innerHTML = `
+        <span class="vtag">▶ VIDEO</span>
+        <video src="${esc(d.url)}" controls playsinline preload="metadata"></video>
+        <button class="expand" title="Fullscreen">⛶</button>
+        ${d.caption ? `<div class="cap">${esc(d.caption)}</div>` : ""}`;
+      cell.querySelector(".expand").onclick = (e) => { e.stopPropagation(); openLightbox(d.url, "video"); };
+    } else {
+      cell.innerHTML = `
+        <img loading="lazy" src="${esc(d.url)}" alt="${esc(d.caption||"demo")}" />
+        <button class="expand" title="Zoom">🔍</button>
+        ${d.caption ? `<div class="cap">${esc(d.caption)}</div>` : ""}`;
+      const img = cell.querySelector("img");
+      img.onload = () => img.classList.add("loaded");
+      if(img.complete) img.classList.add("loaded");
+      const open = () => openLightbox(d.url, "image");
+      img.onclick = open;
+      cell.querySelector(".expand").onclick = (e) => { e.stopPropagation(); open(); };
+    }
+    box.appendChild(cell);
+  });
+}
+
+function openLightbox(url, type){
+  const lb = $("lightbox");
+  lb.innerHTML = type === "video"
+    ? `<video src="${esc(url)}" controls playsinline autoplay style="cursor:default"></video>`
+    : `<img src="${esc(url)}" alt="preview" />`;
+  lb.classList.add("show");
+}
+$("lightbox").onclick = (e) => {
+  // close when tapping the backdrop (not the media itself)
+  if(e.target.id === "lightbox"){ $("lightbox").classList.remove("show"); $("lightbox").innerHTML = ""; }
+};
+
+load();
+</script>
+</body>
+</html>

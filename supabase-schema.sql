@@ -248,6 +248,23 @@ alter table public.phones add column if not exists on_sheet        boolean defau
 -- Admin-only note on an order (shown in the admin Orders tab; never to customers).
 alter table public.orders add column if not exists note text default '';
 
+-- Demo gallery: images/videos per case type, shown on demos.html (admin-managed).
+create table if not exists public.demos (
+  id         bigint generated always as identity primary key,
+  case_key   text not null,                    -- tpu | uv | d2 | d3 | custom
+  media_type text not null default 'image',    -- image | video
+  url        text not null,
+  caption    text default '',
+  sort       int  default 0,
+  active     boolean default true,
+  created_at timestamptz default now()
+);
+alter table public.demos enable row level security;
+drop policy if exists "public read demos" on public.demos;
+create policy "public read demos" on public.demos for select to anon, authenticated using (true);
+drop policy if exists "admin all demos" on public.demos;
+create policy "admin all demos" on public.demos for all to authenticated using (true) with check (true);
+
 create table if not exists public.sync_sources (
   key            text primary key,         -- 'gsm' | 'sheet'
   label          text default '',
