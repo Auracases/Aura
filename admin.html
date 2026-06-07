@@ -139,9 +139,18 @@
   <!-- DESIGNS -->
   <section id="tab-designs">
     <div class="card">
+      <h3>Design categories</h3>
+      <div class="muted" style="font-size:.82rem;margin-bottom:8px">Categories for the storefront design picker (e.g. Anime, Religious). Assign designs to them below.</div>
+      <div class="row" style="gap:8px"><input id="dcatName" placeholder="New category (e.g. Anime)" class="grow" /><button id="dcatAdd">Add</button></div>
+      <div id="dcatMsg" class="err" style="margin-top:6px"></div>
+      <div id="dcatList" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
       <h3>Add a design</h3>
       <div class="wrap-row">
-        <div style="flex:1 1 180px"><label>Name</label><input id="adName" placeholder="e.g. Galaxy Night" /></div>
+        <div style="flex:1 1 160px"><label>Name</label><input id="adName" placeholder="e.g. Galaxy Night" /></div>
+        <div style="flex:1 1 150px"><label>Category</label><select id="adCat"></select></div>
         <div style="flex:1 1 180px"><label>Image file</label><input type="file" id="adFile" accept="image/*" /></div>
         <div style="flex:1 1 100%"><label>Context (optional)</label><input id="adContext" placeholder="Short note shown on hover" /></div>
       </div>
@@ -155,8 +164,11 @@
     <div class="card">
       <h3>Bulk upload designs</h3>
       <div class="muted" style="font-size:.82rem;margin-bottom:8px">Pick many images at once — each becomes a design, named from its filename, set Active.</div>
-      <input type="file" id="bulkFiles" accept="image/*" multiple />
-      <div class="row" style="margin-top:12px;justify-content:flex-end"><button id="bulkUploadBtn">Upload all</button></div>
+      <div class="wrap-row" style="align-items:flex-end">
+        <div style="flex:1 1 150px"><label>Category</label><select id="bulkCat"></select></div>
+        <div style="flex:1 1 220px"><label>Images</label><input type="file" id="bulkFiles" accept="image/*" multiple /></div>
+        <button id="bulkUploadBtn" style="margin-bottom:0">Upload all</button>
+      </div>
       <div id="bulkMsg" class="muted" style="font-size:.82rem;margin-top:8px"></div>
     </div>
     <div id="designsList"><div class="loading">Loading…</div></div>
@@ -395,8 +407,40 @@ function switchTab(tab){
 }
 
 /* ================= DESIGNS ================= */
+let DESIGN_CATS = [];
+function catOptions(sel){
+  return `<option value="">— none —</option>` + DESIGN_CATS.map(c => `<option value="${c.id}" ${String(sel)===String(c.id)?"selected":""}>${esc(c.name)}</option>`).join("");
+}
+async function loadDesignCats(){
+  const { data } = await sb.from("design_categories").select("*").order("sort");
+  DESIGN_CATS = data || [];
+  if($("adCat")) $("adCat").innerHTML = catOptions("");
+  if($("bulkCat")) $("bulkCat").innerHTML = catOptions("");
+  renderDesignCats();
+}
+function renderDesignCats(){
+  const box = $("dcatList"); if(!box) return;
+  if(!DESIGN_CATS.length){ box.innerHTML = `<div class="muted" style="font-size:.82rem">No categories yet.</div>`; return; }
+  box.innerHTML = "";
+  DESIGN_CATS.forEach(c => {
+    const row = document.createElement("div"); row.className = "row"; row.style.cssText = "gap:8px;margin:6px 0;align-items:center";
+    row.innerHTML = `<input class="dc-name" value="${esc(c.name)}" style="flex:2" /><input type="number" class="dc-sort" value="${c.sort||0}" style="width:70px" /><button class="ghost dc-save" style="padding:5px 10px">Save</button><button class="danger dc-del" style="padding:5px 10px">Delete</button>`;
+    row.querySelector(".dc-save").onclick = async (e) => { e.target.disabled = true; await sb.from("design_categories").update({ name: row.querySelector(".dc-name").value.trim(), sort: Number(row.querySelector(".dc-sort").value)||0 }).eq("id", c.id); e.target.textContent = "✓"; setTimeout(loadDesignCats, 500); };
+    row.querySelector(".dc-del").onclick = async () => { if(!confirm(`Delete category "${c.name}"? Designs stay but become uncategorized.`)) return; await sb.from("design_categories").delete().eq("id", c.id); loadDesignCats(); loadDesigns(); };
+    box.appendChild(row);
+  });
+}
+$("dcatAdd").onclick = async () => {
+  const n = $("dcatName").value.trim(), m = $("dcatMsg"); m.textContent = "";
+  if(!n){ m.textContent = "Enter a name."; return; }
+  const { error } = await sb.from("design_categories").insert({ name: n, sort: DESIGN_CATS.length + 1 });
+  if(error){ m.textContent = error.message; return; }
+  $("dcatName").value = ""; loadDesignCats();
+};
+
 async function loadDesigns(){
   const box = $("designsList"); box.innerHTML = `<div class="loading">Loading…</div>`;
+  await loadDesignCats();
   const { data, error } = await sb.from("designs").select("*").order("sort");
   if(error){ box.innerHTML = `<div class="loading">Couldn't load.</div>`; return; }
   if(!data.length){ box.innerHTML = `<div class="loading">No designs yet — add one above.</div>`; return; }
@@ -413,6 +457,7 @@ async function loadDesigns(){
           <span class="pill ${d.active?"p-on":"p-off"}">${d.active?"Active":"Hidden"}</span>
         </div>
         <textarea class="f-context" placeholder="Context">${esc(d.context)}</textarea>
+        <div class="row" style="margin-top:6px;gap:8px"><label style="margin:0">Category</label><select class="f-cat" style="flex:1;padding:4px 8px">${catOptions(d.category_id)}</select></div>
         <div class="row" style="margin-top:6px"><label style="margin:0">Sort</label><input type="number" class="f-sort" value="${d.sort||0}" style="width:80px;padding:4px 8px" /></div>
         <div class="saved"></div>
         <div class="d-actions">
@@ -425,9 +470,11 @@ async function loadDesigns(){
     const saved = card.querySelector(".saved");
     card.querySelector(".b-save").onclick = async (e) => {
       e.target.disabled = true;
+      const cv = card.querySelector(".f-cat").value;
       const { error } = await sb.from("designs").update({
         name: card.querySelector(".f-name").value.trim(),
         context: card.querySelector(".f-context").value.trim(),
+        category_id: cv ? Number(cv) : null,
         sort: Number(card.querySelector(".f-sort").value) || 0
       }).eq("id", d.id);
       saved.textContent = error ? "Failed" : "Saved ✓"; e.target.disabled = false;
@@ -473,7 +520,8 @@ $("addDesignBtn").onclick = async () => {
     if(upErr) throw new Error("storage upload: " + (upErr.message || upErr));
     const { data: pub } = sb.storage.from("designs").getPublicUrl(path);
     const { error } = await sb.from("designs").insert({
-      name, context: $("adContext").value.trim(), image_url: pub.publicUrl, active: $("adActive").checked, sort: 0
+      name, context: $("adContext").value.trim(), image_url: pub.publicUrl, active: $("adActive").checked, sort: 0,
+      category_id: $("adCat").value ? Number($("adCat").value) : null
     });
     if(error) throw new Error("db insert: " + (error.message || error));
     $("adName").value = ""; $("adContext").value = ""; $("adFile").value = ""; $("adActive").checked = true;
@@ -505,7 +553,7 @@ $("bulkUploadBtn").onclick = async () => {
       const { error: upErr } = await sb.storage.from("designs").upload(path, blob, { contentType:"image/jpeg", upsert:false });
       if(upErr) throw upErr;
       const { data: pub } = sb.storage.from("designs").getPublicUrl(path);
-      const { error } = await sb.from("designs").insert({ name, context:"", image_url: pub.publicUrl, active:true, sort:0 });
+      const { error } = await sb.from("designs").insert({ name, context:"", image_url: pub.publicUrl, active:true, sort:0, category_id: $("bulkCat").value ? Number($("bulkCat").value) : null });
       if(error) throw error;
       done++;
     }catch(_){ failed++; }

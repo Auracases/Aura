@@ -199,6 +199,19 @@
     aspect-ratio:3/4.6;position:relative;transition:transform .12s ease;background:#fff;
   }
   .design:active{transform:scale(.96);}
+  .design .dz-zoom{position:absolute;top:5px;right:5px;z-index:3;background:rgba(255,255,255,.9);
+    border:1.5px solid var(--ink);border-radius:8px;width:26px;height:26px;font-size:.74rem;cursor:zoom-in;
+    display:flex;align-items:center;justify-content:center;padding:0;}
+
+  /* design category pills + inner-scroll grid */
+  .design-pills{display:flex;gap:8px;overflow-x:auto;padding:12px 0 4px;-webkit-overflow-scrolling:touch;}
+  .design-pill{flex-shrink:0;background:#FFFDF8;border:2px solid var(--ink);border-radius:999px;
+    padding:7px 14px;font-weight:700;font-size:.82rem;cursor:pointer;font-family:var(--font-body);color:var(--ink);}
+  .design-pill.active{background:var(--ink);color:#fff;}
+  .design-scroll{max-height:380px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:2px solid var(--ink);
+    border-radius:14px;padding:10px;background:#FFFDF8;margin-top:8px;}
+  .design-scroll .design-grid{margin-top:0;}
+
   /* selected-design big preview */
   .design-preview{display:none;margin-top:16px;border:2px solid var(--ink);border-radius:var(--radius);
     box-shadow:var(--shadow);overflow:hidden;background:#fff;}
@@ -414,14 +427,15 @@
   <section class="step" id="step3">
     <span class="step-tag">Step 3</span>
     <h2>Pick a design — or upload your own</h2>
-    <p class="hint">Tap a design, or upload a photo from your gallery.</p>
 
-    <div class="design-grid" id="designGrid"></div>
+    <!-- big preview of the selected design (stays at the top) -->
+    <div id="designPreview" class="design-preview"></div>
+
+    <div class="design-pills" id="designPills"></div>
+    <p class="hint">Tap a design, or upload your own photo.</p>
+    <div class="design-scroll"><div class="design-grid" id="designGrid"></div></div>
     <input type="file" id="fileInput" accept="image/*" style="display:none" />
     <div class="upload-warn" id="uploadWarn"></div>
-
-    <!-- big preview of the selected design -->
-    <div id="designPreview" class="design-preview"></div>
 
     <div class="summary" id="summary"></div>
     <button class="big-btn" id="addBtn" disabled>Add to cart</button>
@@ -654,11 +668,16 @@ async function loadCaseTypes(){
   }catch(_){}
 }
 
+let DESIGN_CATS = [], DCAT_ACTIVE = "all";
 async function loadDesigns(){
   if(!sb) return;
   try{
     const { data, error } = await sb.from("designs").select("*").eq("active", true).order("sort");
     if(!error && data) DESIGNS = data;
+  }catch(_){}
+  try{
+    const { data } = await sb.from("design_categories").select("*").eq("active", true).order("sort");
+    DESIGN_CATS = data || [];
   }catch(_){}
 }
 
@@ -805,18 +824,36 @@ function renderCases(){
 }
 
 /* ---------- designs ---------- */
+function renderDesignPills(){
+  const box = $("designPills");
+  if(!box) return;
+  if(!DESIGN_CATS.length){ box.innerHTML = ""; return; }   // no categories → no pill bar
+  const pills = [{ id:"all", name:"All" }, ...DESIGN_CATS];
+  box.innerHTML = "";
+  pills.forEach(c => {
+    const b = document.createElement("button");
+    b.className = "design-pill" + (String(DCAT_ACTIVE) === String(c.id) ? " active" : "");
+    b.textContent = c.name;
+    b.onclick = () => { DCAT_ACTIVE = c.id; renderDesigns(); };
+    box.appendChild(b);
+  });
+}
 function renderDesigns(){
+  renderDesignPills();
   const grid = $("designGrid");
   grid.innerHTML = "";
 
-  for(const d of DESIGNS){
+  const list = (DCAT_ACTIVE === "all") ? DESIGNS : DESIGNS.filter(d => String(d.category_id) === String(DCAT_ACTIVE));
+  for(const d of list){
     const tile = document.createElement("div");
     tile.className = "design";
     tile.dataset.id = d.id;
     tile.title = d.context || "";
     if(state.design && state.design.kind === "preset" && String(state.design.id) === String(d.id)) tile.classList.add("selected");
     tile.innerHTML = `<div class="art" style="background-image:url('${d.image_url}');background-size:cover;background-position:center"></div>
+                      <button class="dz-zoom" title="Zoom">🔍</button>
                       <div class="d-name">${escapeHtml(d.name)}</div>`;
+    tile.querySelector(".dz-zoom").onclick = (e) => { e.stopPropagation(); openLightbox(d.image_url, "image"); };
     tile.onclick = () => {
       state.design = {kind:"preset", ...d};
       document.querySelectorAll(".design").forEach(el=>el.classList.remove("selected"));

@@ -251,6 +251,21 @@ alter table public.orders add column if not exists note text default '';
 -- Enable/disable a case type. Disabled types never show in the customize flow.
 alter table public.case_types add column if not exists active boolean default true;
 
+-- Design categories (anime, religious, …) for the storefront design picker.
+create table if not exists public.design_categories (
+  id         bigint generated always as identity primary key,
+  name       text not null unique,
+  sort       int  default 0,
+  active     boolean default true,
+  created_at timestamptz default now()
+);
+alter table public.design_categories enable row level security;
+drop policy if exists "public read design_categories" on public.design_categories;
+create policy "public read design_categories" on public.design_categories for select to anon, authenticated using (true);
+drop policy if exists "admin all design_categories" on public.design_categories;
+create policy "admin all design_categories" on public.design_categories for all to authenticated using (true) with check (true);
+alter table public.designs add column if not exists category_id bigint references public.design_categories(id) on delete set null;
+
 -- Demo gallery (demos.html), fully admin-managed. Categories are free-form and
 -- independent of the customize case_types. Each category can show an "Order now"
 -- button linking anywhere (a ready-made product page, a collection, or the
