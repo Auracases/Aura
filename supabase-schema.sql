@@ -254,19 +254,32 @@ alter table public.orders add column if not exists note text default '';
 -- Admin tags (comma-separated, e.g. "urgent, reprint") for organizing/filtering orders.
 alter table public.orders add column if not exists tags text default '';
 
--- Notification / export config (set from admin → Pricing & Settings).
-alter table public.settings add column if not exists telegram_token text default '';
-alter table public.settings add column if not exists telegram_chat  text default '';
-alter table public.settings add column if not exists sheet_webhook   text default '';   -- Apps Script web-app URL
+-- Notification / export config — ADMIN-ONLY table (NOT anon-readable, so the bot token
+-- and webhook URL never leak through the public settings read).
+create table if not exists public.notify_config (
+  id             int primary key default 1,
+  telegram_token text default '',
+  telegram_chat  text default '',
+  sheet_webhook  text default '',
+  constraint notify_singleton check (id = 1)
+);
+insert into public.notify_config (id) values (1) on conflict (id) do nothing;
+alter table public.notify_config enable row level security;
+drop policy if exists "admin notify_config" on public.notify_config;
+create policy "admin notify_config" on public.notify_config for all to authenticated using (true) with check (true);
+-- remove the previously-leaked columns from the public settings table
+alter table public.settings drop column if exists telegram_token;
+alter table public.settings drop column if exists telegram_chat;
+alter table public.settings drop column if exists sheet_webhook;
 
 -- On every new order: ping Telegram + POST the order to a Google-Sheet Apps Script webhook.
 -- Async via pg_net so it never blocks/slows checkout; failures are swallowed.
 -- Requires: create extension if not exists pg_net;
 create or replace function public.notify_new_order() returns trigger
 language plpgsql security definer set search_path = public, extensions, net as $$
-declare s public.settings; items_txt text; msg text;
+declare s public.notify_config; items_txt text; msg text;
 begin
-  select * into s from public.settings where id = 1;
+  select * into s from public.notify_config where id = 1;
   select string_agg('• ' || coalesce(i->>'caseType', i->>'name', 'item')
                     || case when coalesce(i->>'model','') <> '' then ' (' || (i->>'model') || ')' else '' end, E'\n')
     into items_txt from jsonb_array_elements(coalesce(NEW.items,'[]'::jsonb)) i;

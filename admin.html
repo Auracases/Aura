@@ -753,7 +753,7 @@ function orderCard(o){
   card.innerHTML = `
     <div class="o-head">
       <label class="row" style="gap:7px;margin:0"><input type="checkbox" class="o-pick" data-oid="${o.id}" /><span class="o-id">${esc(o.order_id)}</span></label>
-      <span class="pill ${o.status==="Cancelled"?"p-off":"p-on"}">${esc(o.status||"New")}</span>
+      <select class="o-stat" style="width:auto;padding:5px 8px;font-weight:700">${STATUSES.map(s=>`<option ${s===(o.status||"New")?"selected":""}>${s}</option>`).join("")}</select>
     </div>
     <div class="o-meta">${esc(o.name||"")} · ${esc(o.mobile||"")} · ${esc(o.area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka")} · ${esc(new Date(o.created_at).toLocaleString())}</div>
     <div class="o-head"><div class="muted" style="font-size:.82rem">${(o.items||[]).length} item(s) · tap to open</div><div><b>${taka(o.total)}</b> · ${esc(o.payment_method||"")}</div></div>
@@ -761,6 +761,9 @@ function orderCard(o){
     ${tagChips.length?`<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${tagChips.map(t=>`<span class="pill" style="background:#e6f0ff;color:#1b4fa0">${esc(t)}</span>`).join("")}</div>`:""}
     ${o.note?`<div class="o-note"><b>📝 Note:</b> ${esc(o.note)}</div>`:""}`;
   card.querySelector(".o-pick").onclick = (e) => e.stopPropagation();
+  const st = card.querySelector(".o-stat");
+  st.onclick = (e) => e.stopPropagation();
+  st.onchange = async (e) => { e.stopPropagation(); st.disabled = true; await sb.from("orders").update({ status: st.value }).eq("id", o.id); st.disabled = false; };
   card.onclick = () => openOrder(o);
   return card;
 }
@@ -1024,10 +1027,10 @@ async function loadSettings(){
     $("setSaleType").value = s.store_discount_type || "none";
     $("setSaleValue").value = s.store_discount_value ?? 0;
     $("setSaleLabel").value = s.store_discount_label || "";
-    $("setTgToken").value = s.telegram_token || "";
-    $("setTgChat").value = s.telegram_chat || "";
-    $("setSheet").value = s.sheet_webhook || "";
   }
+  // notification config lives in its own admin-only table
+  try{ const { data: nc } = await sb.from("notify_config").select("*").eq("id",1).single();
+    if(nc){ $("setTgToken").value = nc.telegram_token||""; $("setTgChat").value = nc.telegram_chat||""; $("setSheet").value = nc.sheet_webhook||""; } }catch(_){}
 }
 $("saveSettings").onclick = async () => {
   const msg = $("setMsg"); msg.style.color = "var(--ok)"; msg.textContent = "";
@@ -1039,13 +1042,17 @@ $("saveSettings").onclick = async () => {
     store_discount_active: $("setSaleActive").checked,
     store_discount_type: $("setSaleType").value,
     store_discount_value: Number($("setSaleValue").value) || 0,
-    store_discount_label: $("setSaleLabel").value.trim(),
+    store_discount_label: $("setSaleLabel").value.trim()
+  }).eq("id", 1);
+  // notification config → admin-only table
+  const { error: ncErr } = await sb.from("notify_config").update({
     telegram_token: $("setTgToken").value.trim(),
     telegram_chat: $("setTgChat").value.trim(),
     sheet_webhook: $("setSheet").value.trim()
   }).eq("id", 1);
-  msg.style.color = error ? "var(--bad)" : "var(--ok)";
-  msg.textContent = error ? "Failed" : "Saved ✓";
+  const err = error || ncErr;
+  msg.style.color = err ? "var(--bad)" : "var(--ok)";
+  msg.textContent = err ? ("Failed: " + (err.message||"")) : "Saved ✓";
   $("saveSettings").disabled = false;
   setTimeout(()=>msg.textContent="",2000);
 };
