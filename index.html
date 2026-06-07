@@ -199,9 +199,14 @@
     aspect-ratio:3/4.6;position:relative;transition:transform .12s ease;background:#fff;
   }
   .design:active{transform:scale(.96);}
-  .design .dz-zoom{position:absolute;top:5px;right:5px;z-index:3;background:rgba(255,255,255,.9);
-    border:1.5px solid var(--ink);border-radius:8px;width:28px;height:28px;font-size:.8rem;cursor:zoom-in;
-    display:flex;align-items:center;justify-content:center;padding:0;}
+  /* selected-design big preview */
+  .design-preview{display:none;margin-top:16px;border:2px solid var(--ink);border-radius:var(--radius);
+    box-shadow:var(--shadow);overflow:hidden;background:#fff;}
+  .design-preview.show{display:block;}
+  .design-preview img{width:100%;display:block;cursor:zoom-in;}
+  .design-preview .dp-cap{padding:9px 13px;display:flex;justify-content:space-between;align-items:center;
+    font-weight:700;font-size:.92rem;border-top:2px solid var(--ink);}
+  .design-preview .dp-cap small{color:var(--accent-dark);font-weight:700;font-size:.74rem;}
   .design.selected{box-shadow:3px 3px 0 var(--accent);border-color:var(--accent);}
   .design .art{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.7rem;}
   .design .d-name{
@@ -414,6 +419,9 @@
     <div class="design-grid" id="designGrid"></div>
     <input type="file" id="fileInput" accept="image/*" style="display:none" />
     <div class="upload-warn" id="uploadWarn"></div>
+
+    <!-- big preview of the selected design -->
+    <div id="designPreview" class="design-preview"></div>
 
     <div class="summary" id="summary"></div>
     <button class="big-btn" id="addBtn" disabled>Add to cart</button>
@@ -808,9 +816,7 @@ function renderDesigns(){
     tile.title = d.context || "";
     if(state.design && state.design.kind === "preset" && String(state.design.id) === String(d.id)) tile.classList.add("selected");
     tile.innerHTML = `<div class="art" style="background-image:url('${d.image_url}');background-size:cover;background-position:center"></div>
-                      <button class="dz-zoom" title="Zoom">🔍</button>
                       <div class="d-name">${escapeHtml(d.name)}</div>`;
-    tile.querySelector(".dz-zoom").onclick = (e) => { e.stopPropagation(); openLightbox(d.image_url, "image"); };
     tile.onclick = () => {
       state.design = {kind:"preset", ...d};
       document.querySelectorAll(".design").forEach(el=>el.classList.remove("selected"));
@@ -838,6 +844,21 @@ function renderDesignBanner(){
     b.classList.add("show");
   } else {
     b.classList.remove("show");
+  }
+  renderDesignPreview();
+}
+
+// big preview of the currently-selected design (preset or upload)
+function renderDesignPreview(){
+  const box = $("designPreview"), d = state.design;
+  const src = d ? (d.kind === "preset" ? d.image_url : d.url) : null;
+  if(src){
+    box.innerHTML = `<img src="${src}" alt="selected design" />
+      <div class="dp-cap"><span>${escapeHtml(d.kind === "preset" ? (d.name || "Selected design") : "Your photo")}</span><small>🔍 tap to zoom</small></div>`;
+    box.querySelector("img").onclick = () => openLightbox(src, "image");
+    box.classList.add("show");
+  } else {
+    box.classList.remove("show");
   }
 }
 function designLink(id){ return location.origin + location.pathname + "?design=" + id; }
