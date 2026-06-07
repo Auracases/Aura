@@ -54,6 +54,8 @@
   /* designs */
   .d-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
   .d-card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .d-drag{cursor:grab;color:var(--muted);font-size:1rem;line-height:1;user-select:none;padding:0 2px}
+  .d-drag:active{cursor:grabbing}
   .d-thumb{height:120px;background:#eee no-repeat center/cover}
   .d-body{padding:11px 12px}
   .d-body .nm{font-weight:700}
@@ -182,6 +184,7 @@
     <div class="row" style="gap:8px;margin-bottom:8px;align-items:center">
       <label style="margin:0">Filter</label>
       <select id="dFilter" style="max-width:240px"><option value="">All categories</option></select>
+      <span class="muted" style="font-size:.78rem">Drag the ⠿ handle to reorder.</span>
     </div>
     <div id="designsList"><div class="loading">Loading…</div></div>
   </section>
@@ -549,11 +552,12 @@ async function loadDesigns(){
   list.forEach(d => {
     const card = document.createElement("div");
     card.className = "d-card";
+    card.dataset.id = d.id;
     card.innerHTML = `
       <div class="d-thumb" style="background-image:url('${esc(d.image_url)}')"></div>
       <div class="d-body">
         <div class="row" style="justify-content:space-between">
-          <label class="row" style="gap:6px;margin:0"><input type="checkbox" class="d-pick" style="width:auto" /><input value="${esc(d.name)}" class="f-name" style="font-weight:700;border:none;padding:2px 0" /></label>
+          <label class="row" style="gap:6px;margin:0"><span class="d-drag" draggable="true" title="Drag to reorder">⠿</span><input type="checkbox" class="d-pick" style="width:auto" /><input value="${esc(d.name)}" class="f-name" style="font-weight:700;border:none;padding:2px 0" /></label>
           <span class="pill ${d.active?"p-on":"p-off"}">${d.active?"Active":"Hidden"}</span>
         </div>
         <textarea class="f-context" placeholder="Context">${esc(d.context)}</textarea>
@@ -626,6 +630,30 @@ async function loadDesigns(){
     }
     loadDesigns();
   };
+
+  // drag-to-reorder via the ⠿ handle → persists sort on drop
+  grid.addEventListener("dragstart", e => {
+    const h = e.target.closest(".d-drag"); if(!h){ e.preventDefault(); return; }
+    const c = h.closest(".d-card"); dragId = c.dataset.id; c.style.opacity = ".4";
+  });
+  grid.addEventListener("dragend", e => { const c = e.target.closest(".d-card"); if(c) c.style.opacity = ""; });
+  grid.addEventListener("dragover", e => {
+    e.preventDefault();
+    const tgt = e.target.closest(".d-card");
+    const dragging = grid.querySelector(`.d-card[data-id="${dragId}"]`);
+    if(!tgt || !dragging || tgt === dragging) return;
+    const r = tgt.getBoundingClientRect();
+    const before = e.clientY < r.top + r.height/2 || (e.clientY < r.bottom && e.clientX < r.left + r.width/2);
+    grid.insertBefore(dragging, before ? tgt : tgt.nextSibling);
+  });
+  grid.addEventListener("drop", async e => {
+    e.preventDefault();
+    const cards = [...grid.querySelectorAll(".d-card")];
+    for(let i = 0; i < cards.length; i++){
+      const f = cards[i].querySelector(".f-sort"); if(f) f.value = i;   // reflect new order in the field
+      await sb.from("designs").update({ sort: i }).eq("id", Number(cards[i].dataset.id));
+    }
+  });
 }
 function storagePath(url, bucket){
   const marker = "/public/" + bucket + "/";
