@@ -191,18 +191,27 @@
 
   <!-- PHONES -->
   <section id="tab-phones" class="hidden">
-    <div class="note">
-      <b>Import phones</b> pulls your old Google Sheets list into Supabase (one-time).
-      After that, manage models here or in the Supabase dashboard table editor.
-    </div>
     <div class="card">
-      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <button id="importPhones">Import phones from old sheet</button>
-        <span id="importMsg" class="muted" style="font-size:.85rem"></span>
+      <h3>Automatic sync</h3>
+      <div class="muted" style="font-size:.85rem;margin-bottom:8px">
+        Master list = all phone models (drives search). Availability sheet = which models have 2D/3D.
+        Toggle auto-sync, set how often, or run now.
       </div>
+      <div id="syncRows"><div class="loading">Loading…</div></div>
     </div>
+
     <div class="card">
-      <h3>Add / search models</h3>
+      <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
+        <h3 style="margin:0">Availability sheet models <span id="sheetCount" class="muted" style="font-size:.8rem"></span></h3>
+        <input id="sheetFilter" placeholder="Filter…" style="max-width:200px" />
+      </div>
+      <div class="muted" style="font-size:.8rem;margin:6px 0">Models from the Google Sheet — loaded here so you can manage 2D/3D fast.</div>
+      <div id="sheetList"><div class="loading">Loading…</div></div>
+    </div>
+
+    <div class="card">
+      <h3>Search all models (incl. GSM master)</h3>
+      <div class="muted" style="font-size:.8rem;margin-bottom:8px">The full catalog is large — search to find any model and set its availability.</div>
       <div class="wrap-row" style="align-items:flex-end">
         <div style="flex:1 1 160px"><label>Brand</label><input id="phBrand" placeholder="Samsung" /></div>
         <div style="flex:1 1 200px"><label>Model name</label><input id="phModel" placeholder="Galaxy A15" /></div>
@@ -277,7 +286,8 @@ function showApp(){
 
 /* ================= TABS ================= */
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
-const LOADERS = { designs:loadDesigns, orders:loadOrders, promos:loadPromos, settings:loadSettings, phones:()=>{} };
+const LOADERS = { designs:loadDesigns, orders:loadOrders, promos:loadPromos, settings:loadSettings, phones:loadPhonesTab };
+function loadPhonesTab(){ loadSync(); loadSheetList(); }
 function switchTab(tab){
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
   ["designs","orders","promos","settings","phones"].forEach(t => $("tab-"+t).classList.toggle("hidden", t !== tab));
@@ -505,37 +515,109 @@ $("saveSettings").onclick = async () => {
 };
 
 /* ================= PHONES ================= */
-$("importPhones").onclick = async () => {
-  const msg = $("importMsg"); msg.textContent = "Fetching…";
-  $("importPhones").disabled = true;
-  try{
-    const res = await fetch(CONFIG.LEGACY_PHONES_URL);
-    const list = await res.json();
-    const seen = new Set();
-    const rows = [];
-    (list||[]).forEach(p => {
-      const model = String(p.modelName||"").trim();
-      const key = norm(model);
-      if(!model || !key || seen.has(key)) return;
-      seen.add(key);
-      rows.push({
-        brand: String(p.brand||"").trim(),
-        model_name: model, search_key: key,
-        avail_2d: String(p.availability2D).trim().toLowerCase()==="available",
-        avail_3d: String(p.availability3D).trim().toLowerCase()==="available"
-      });
-    });
-    let done = 0;
-    for(let i = 0; i < rows.length; i += 400){
-      const chunk = rows.slice(i, i+400);
-      const { error } = await sb.from("phones").upsert(chunk, { onConflict: "search_key" });
-      if(error) throw error;
-      done += chunk.length; msg.textContent = `Imported ${done}/${rows.length}…`;
-    }
-    msg.textContent = `Imported ${rows.length} models ✓`;
-  }catch(err){ msg.textContent = "Import failed — " + (err.message || "error"); }
-  $("importPhones").disabled = false;
-};
+
+/* ---- shared row renderer for a <tbody>: one phone row with avail toggles,
+        source tag, override pin/release, delete. Used by both lists. ---- */
+function renderPhoneRow(tb, p, reload){
+  const tr = document.createElement("tr");
+  const src = p.on_sheet ? `<span class="muted" style="font-size:.72rem">sheet</span>` : `<span class="muted" style="font-size:.72rem">GSM</span>`;
+  const ov  = p.manual_override
+    ? `<span class="muted" style="font-size:.72rem">pinned</span> <button class="ghost b-rel" style="padding:2px 8px">Release</button>`
+    : src;
+  tr.innerHTML = `
+    <td>${esc(p.brand)}</td><td>${esc(p.model_name)}</td>
+    <td><input type="checkbox" class="t2" ${p.avail_2d?"checked":""} style="width:auto" /></td>
+    <td><input type="checkbox" class="t3" ${p.avail_3d?"checked":""} style="width:auto" /></td>
+    <td style="white-space:nowrap">${ov}</td>
+    <td style="text-align:right"><button class="ghost b-save" style="padding:4px 10px">Save</button>
+        <button class="danger b-del" style="padding:4px 10px">✕</button></td>`;
+  tr.querySelector(".b-save").onclick = async (e) => {
+    e.target.disabled = true;
+    await sb.from("phones").update({
+      avail_2d: tr.querySelector(".t2").checked,
+      avail_3d: tr.querySelector(".t3").checked,
+      manual_override: true,            // admin edit wins over sheet sync
+      updated_at: new Date().toISOString()
+    }).eq("id", p.id);
+    e.target.textContent = "✓"; setTimeout(reload, 700);
+  };
+  const rel = tr.querySelector(".b-rel");
+  if(rel) rel.onclick = async () => {
+    await sb.from("phones").update({ manual_override:false, updated_at:new Date().toISOString() }).eq("id", p.id);
+    reload();
+  };
+  tr.querySelector(".b-del").onclick = async () => { if(confirm(`Delete ${p.model_name}?`)){ await sb.from("phones").delete().eq("id", p.id); reload(); } };
+  tb.appendChild(tr);
+}
+function phoneTableShell(box){
+  box.innerHTML = `<div class="card" style="overflow-x:auto;max-height:420px"><table><thead><tr>
+    <th>Brand</th><th>Model</th><th>2D</th><th>3D</th><th>Source</th><th></th></tr><tbody></tbody></table></div>`;
+  return box.querySelector("tbody");
+}
+
+/* ---- sheet list: auto-loaded, fast, on_sheet=true only ---- */
+let SHEET_ROWS = [];
+async function loadSheetList(){
+  const box = $("sheetList");
+  const { data, error } = await sb.from("phones").select("*").eq("on_sheet", true).order("model_name").limit(2000);
+  if(error){ box.innerHTML = `<div class="loading">Couldn't load.</div>`; return; }
+  SHEET_ROWS = data || [];
+  $("sheetCount").textContent = `(${SHEET_ROWS.length})`;
+  renderSheetList();
+}
+function renderSheetList(){
+  const box = $("sheetList");
+  const q = norm($("sheetFilter").value || "");
+  const rows = q ? SHEET_ROWS.filter(p => norm(p.model_name).includes(q) || norm(p.brand).includes(q)) : SHEET_ROWS;
+  if(!rows.length){ box.innerHTML = `<div class="loading">No models.</div>`; return; }
+  const tb = phoneTableShell(box);
+  rows.forEach(p => renderPhoneRow(tb, p, loadSheetList));
+}
+$("sheetFilter").addEventListener("input", () => { clearTimeout(window._sf); window._sf = setTimeout(renderSheetList, 150); });
+
+/* ---- automatic sync panel ---- */
+async function loadSync(){
+  const box = $("syncRows");
+  const { data, error } = await sb.from("sync_sources").select("*").order("key");
+  if(error){ box.innerHTML = `<div class="loading">Couldn't load sync config.</div>`; return; }
+  box.innerHTML = "";
+  (data||[]).forEach(s => {
+    const when = s.last_run_at ? new Date(s.last_run_at).toLocaleString() : "never";
+    const row = document.createElement("div");
+    row.className = "card";
+    row.style.cssText = "margin:8px 0;padding:12px";
+    row.innerHTML = `
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
+        <b>${esc(s.label || s.key)}</b>
+        <label class="row" style="gap:6px;margin:0">
+          <input type="checkbox" class="s-en" ${s.enabled?"checked":""} style="width:auto" /> Auto
+        </label>
+        <label class="row" style="gap:6px;margin:0">every
+          <input type="number" min="1" class="s-freq" value="${Number(s.frequency_days)||1}" style="width:64px" /> days
+        </label>
+        <button class="ghost s-save" style="padding:4px 10px">Save</button>
+        <button class="s-run" style="padding:4px 10px">Run now</button>
+      </div>
+      <div class="muted" style="font-size:.8rem;margin-top:6px">Last run: ${esc(when)} — ${esc(s.last_status||"")}</div>`;
+    row.querySelector(".s-save").onclick = async (e) => {
+      e.target.disabled = true;
+      await sb.from("sync_sources").update({
+        enabled: row.querySelector(".s-en").checked,
+        frequency_days: Math.max(1, parseInt(row.querySelector(".s-freq").value,10) || 1),
+        updated_at: new Date().toISOString()
+      }).eq("key", s.key);
+      e.target.textContent = "✓"; setTimeout(()=>{e.target.textContent="Save"; e.target.disabled=false;},1200);
+    };
+    row.querySelector(".s-run").onclick = async (e) => {
+      e.target.disabled = true; e.target.textContent = "Running…";
+      const { data: res, error: err } = await sb.functions.invoke("sync", { body:{ source:s.key, force:true } });
+      e.target.disabled = false; e.target.textContent = "Run now";
+      if(err){ alert("Sync failed: " + err.message); }
+      else { alert(res?.status || "Done"); loadSync(); }
+    };
+    box.appendChild(row);
+  });
+}
 
 $("addPhone").onclick = async () => {
   const model = $("phModel").value.trim();
@@ -543,10 +625,12 @@ $("addPhone").onclick = async () => {
   if(!model){ m.textContent = "Model name required."; return; }
   const { error } = await sb.from("phones").upsert({
     brand: $("phBrand").value.trim(), model_name: model, search_key: norm(model),
-    avail_2d: $("ph2d").checked, avail_3d: $("ph3d").checked
+    avail_2d: $("ph2d").checked, avail_3d: $("ph3d").checked,
+    manual_override: true, on_sheet: true
   }, { onConflict: "search_key" });
   if(error){ m.textContent = error.message; return; }
   $("phBrand").value = ""; $("phModel").value = ""; $("ph2d").checked = false; $("ph3d").checked = false;
+  loadSheetList();
   if($("phSearch").value.trim()) runPhoneSearch();
 };
 
@@ -559,25 +643,8 @@ async function runPhoneSearch(){
   const { data, error } = await sb.from("phones").select("*").ilike("model_name", `%${q}%`).order("model_name").limit(50);
   if(error){ box.innerHTML = `<div class="loading">Couldn't search.</div>`; return; }
   if(!data.length){ box.innerHTML = `<div class="loading">No matches.</div>`; return; }
-  box.innerHTML = `<div class="card" style="overflow-x:auto"><table><thead><tr>
-    <th>Brand</th><th>Model</th><th>2D</th><th>3D</th><th></th></tr><tbody></tbody></table></div>`;
-  const tb = box.querySelector("tbody");
-  data.forEach(p => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${esc(p.brand)}</td><td>${esc(p.model_name)}</td>
-      <td><input type="checkbox" class="t2" ${p.avail_2d?"checked":""} style="width:auto" /></td>
-      <td><input type="checkbox" class="t3" ${p.avail_3d?"checked":""} style="width:auto" /></td>
-      <td style="text-align:right"><button class="ghost b-save" style="padding:4px 10px">Save</button>
-          <button class="danger b-del" style="padding:4px 10px">✕</button></td>`;
-    tr.querySelector(".b-save").onclick = async (e) => {
-      e.target.disabled = true;
-      await sb.from("phones").update({ avail_2d: tr.querySelector(".t2").checked, avail_3d: tr.querySelector(".t3").checked }).eq("id", p.id);
-      e.target.textContent = "✓"; setTimeout(()=>{e.target.textContent="Save"; e.target.disabled=false;}, 1200);
-    };
-    tr.querySelector(".b-del").onclick = async () => { if(confirm(`Delete ${p.model_name}?`)){ await sb.from("phones").delete().eq("id", p.id); runPhoneSearch(); } };
-    tb.appendChild(tr);
-  });
+  const tb = phoneTableShell(box);
+  data.forEach(p => renderPhoneRow(tb, p, runPhoneSearch));
 }
 
 boot();
