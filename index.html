@@ -961,7 +961,7 @@ function renderDesignPreview(){
   }
   if(src){
     box.innerHTML = `<div class="dp-img"><img src="${src}" alt="selected design" /></div>
-      <div class="dp-cap"><span>${escapeHtml(d.kind === "preset" ? (d.name || "Selected design") : "Your photo")}</span><small>🔍 tap to zoom</small></div>`;
+      <div class="dp-cap"><span>${escapeHtml(d.kind === "preset" ? (d.name || "") : "Your photo")}</span><small>🔍 tap to zoom</small></div>`;
     box.querySelector("img").onclick = () => {
       if(d.kind === "preset"){ const imgs = currentDesignImages(); const idx = imgs.findIndex(x => String(x.id) === String(d.id)); openGallery(imgs, idx >= 0 ? idx : 0); }
       else openLightbox(src, "image");

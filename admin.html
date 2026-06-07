@@ -170,7 +170,7 @@
 
     <div class="card">
       <h3>Bulk upload designs</h3>
-      <div class="muted" style="font-size:.82rem;margin-bottom:8px">Pick many images at once — each becomes a design, named from its filename, set Active.</div>
+      <div class="muted" style="font-size:.82rem;margin-bottom:8px">Pick many images at once — each becomes a design, Active, with no name (filenames are never shown to customers). Add names later if you want.</div>
       <div class="wrap-row" style="align-items:flex-end">
         <div style="flex:1 1 150px"><label>Category</label><select id="bulkCat"></select></div>
         <div style="flex:1 1 220px"><label>Images</label><input type="file" id="bulkFiles" accept="image/*" multiple /></div>
@@ -618,10 +618,10 @@ function storagePath(url, bucket){
 }
 
 $("addDesignBtn").onclick = async () => {
-  const name = $("adName").value.trim();
+  const name = $("adName").value.trim();   // optional — leave blank and nothing shows on the storefront
   const file = $("adFile").files[0];
   const msg = $("addMsg");
-  if(!name || !file){ msg.style.color = "var(--bad)"; msg.textContent = "Name and image file are required."; return; }
+  if(!file){ msg.style.color = "var(--bad)"; msg.textContent = "Image file is required."; return; }
   $("addDesignBtn").disabled = true;
   try{
     const jpeg = await compressImage(await fileToDataUrl(file));
@@ -655,16 +655,17 @@ $("bulkUploadBtn").onclick = async () => {
   let done = 0, failed = 0;
   for(let i = 0; i < files.length; i++){
     const file = files[i];
-    const name = (file.name.replace(/\.[^.]+$/,"").replace(/[_-]+/g," ").trim()) || `Design ${i+1}`;
-    msg.style.color = "var(--muted)"; msg.textContent = `Uploading ${i+1}/${files.length}: ${name}…`;
+    // No auto-name from filename — designs stay nameless unless the owner types one
+    // (filenames must never reach the storefront). Name shown in progress only.
+    msg.style.color = "var(--muted)"; msg.textContent = `Uploading ${i+1}/${files.length}…`;
     try{
       const jpeg = await compressImage(await fileToDataUrl(file));
       const blob = await dataUrlToBlob(jpeg);
-      const path = `${Date.now()}-${i}-${norm(name).slice(0,40) || "design"}.jpg`;
+      const path = `${Date.now()}-${i}-design.jpg`;
       const { error: upErr } = await sb.storage.from("designs").upload(path, blob, { contentType:"image/jpeg", upsert:false });
       if(upErr) throw upErr;
       const { data: pub } = sb.storage.from("designs").getPublicUrl(path);
-      const { error } = await sb.from("designs").insert({ name, context:"", image_url: pub.publicUrl, active:true, sort:0, category_id: $("bulkCat").value ? Number($("bulkCat").value) : null });
+      const { error } = await sb.from("designs").insert({ name:"", context:"", image_url: pub.publicUrl, active:true, sort:0, category_id: $("bulkCat").value ? Number($("bulkCat").value) : null });
       if(error) throw error;
       done++;
     }catch(_){ failed++; }
