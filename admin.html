@@ -1123,7 +1123,9 @@ async function renderDemoItems(){
         order_url: card.querySelector(".f-order").value.trim(),
         show_order: card.querySelector(".f-show").checked
       }).eq("id", d.id);
-      saved.textContent = error ? "Failed" : "Saved ✓"; e.target.disabled = false; setTimeout(()=>saved.textContent="",1500);
+      saved.style.color = error ? "var(--bad)" : "var(--ok)";
+      saved.textContent = error ? ("Failed: " + (error.message || error)) : "Saved ✓";
+      e.target.disabled = false; if(!error) setTimeout(()=>saved.textContent="",1500);
     };
     card.querySelector(".b-toggle").onclick = async () => { await sb.from("demos").update({ active: !d.active }).eq("id", d.id); renderDemoItems(); };
     card.querySelector(".b-del").onclick = async () => {
