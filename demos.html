@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Case Demos — Aura Cases</title>
+<script src="analytics.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -75,6 +76,15 @@
   .lightbox{position:fixed;inset:0;background:rgba(20,16,30,.9);display:none;align-items:center;justify-content:center;z-index:200;padding:18px;cursor:zoom-out;}
   .lightbox.show{display:flex;}
   .lightbox img,.lightbox video{max-width:100%;max-height:90vh;border-radius:14px;border:2px solid #fff;box-shadow:0 8px 44px rgba(0,0,0,.5);background:#000;}
+  footer{margin-top:40px;text-align:center;font-size:.7rem;color:var(--ink-soft);padding-bottom:24px;line-height:1.6;}
+  .foot-links{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;}
+  .foot-links a{color:var(--ink);text-decoration:none;font-weight:700;font-size:.82rem;display:inline-flex;align-items:center;gap:5px;}
+  .foot-links a:hover{color:var(--accent);}
+  .foot-policy{max-width:540px;margin:12px auto 0;text-align:left;border-top:2px solid var(--ink);padding-top:12px;}
+  .foot-policy summary{cursor:pointer;font-weight:700;text-align:center;color:var(--ink);font-size:.82rem;list-style:none;}
+  .foot-policy summary::-webkit-details-marker{display:none;}
+  .foot-policy ul{margin:8px 0 0;padding-left:18px;}
+  .foot-policy li{font-size:.72rem;color:var(--ink-soft);margin-bottom:5px;}
 </style>
 </head>
 <body>
@@ -94,6 +104,24 @@
     <div class="pills" id="pills"></div>
     <div class="type-info" id="typeInfo"></div>
     <div class="gallery" id="gallery"><div class="loading">Loading…</div></div>
+
+    <footer>
+      <div class="foot-links">
+        <a href="https://wa.me/8801755930682" target="_blank" rel="noopener">💬 WhatsApp</a>
+        <a href="https://www.facebook.com/auracasesbd/" target="_blank" rel="noopener">📘 Facebook</a>
+        <a href="tel:+8801755930682">📞 01755-930682</a>
+      </div>
+      <details class="foot-policy">
+        <summary>Return &amp; Replacement Policy</summary>
+        <ul>
+          <li>Each case is custom-made for your order, so we kindly ask you to accept your parcel on delivery. Please double-check your phone model and design before placing the order.</li>
+          <li>Damaged, defective, or wrong item? We replace it free. Report within <b>24 hours</b> of delivery with an unboxing photo or video.</li>
+          <li>Cash on Delivery — please check your parcel before paying.</li>
+          <li>For custom items we offer a free replacement, not a cash refund.</li>
+        </ul>
+      </details>
+      <div style="margin-top:12px">Aura Cases · তোমার ফোন, তোমার স্টাইল</div>
+    </footer>
   </div>
 
   <div id="lightbox" class="lightbox"></div>

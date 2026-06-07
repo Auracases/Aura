@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Aura Cases — Custom Phone Cases</title>
+<script src="analytics.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -377,7 +378,15 @@
   .conf-next{text-align:left;font-size:.85rem;background:#FFF6E6;border:1.5px dashed #D9A53C;border-radius:11px;padding:13px;color:#7A5A14;line-height:1.55;margin-bottom:14px;}
   .conf-next b{color:var(--ink);}
 
-  footer{margin-top:34px;text-align:center;font-size:.7rem;color:var(--ink-soft);padding-bottom:10px;line-height:1.6;}
+  footer{margin-top:34px;text-align:center;font-size:.7rem;color:var(--ink-soft);padding-bottom:18px;line-height:1.6;}
+  .foot-links{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;}
+  .foot-links a{color:var(--ink);text-decoration:none;font-weight:700;font-size:.82rem;display:inline-flex;align-items:center;gap:5px;}
+  .foot-links a:hover{color:var(--accent);}
+  .foot-policy{max-width:540px;margin:12px auto 0;text-align:left;border-top:1px solid var(--line,#eee);padding-top:10px;}
+  .foot-policy summary{cursor:pointer;font-weight:700;text-align:center;color:var(--ink);font-size:.8rem;list-style:none;}
+  .foot-policy summary::-webkit-details-marker{display:none;}
+  .foot-policy ul{margin:8px 0 0;padding-left:18px;}
+  .foot-policy li{font-size:.72rem;color:var(--ink-soft);margin-bottom:5px;}
 </style>
 </head>
 <body>
@@ -471,7 +480,21 @@
   </section>
 
   <footer>
-    Aura Cases · তোমার ফোন, তোমার স্টাইল
+    <div class="foot-links">
+      <a href="https://wa.me/8801755930682" target="_blank" rel="noopener">💬 WhatsApp</a>
+      <a href="https://www.facebook.com/auracasesbd/" target="_blank" rel="noopener">📘 Facebook</a>
+      <a href="tel:+8801755930682">📞 01755-930682</a>
+    </div>
+    <details class="foot-policy">
+      <summary>Return &amp; Replacement Policy</summary>
+      <ul>
+        <li>Each case is custom-made for your order, so we kindly ask you to accept your parcel on delivery. Please double-check your phone model and design before placing the order.</li>
+        <li>Damaged, defective, or wrong item? We replace it free. Report within <b>24 hours</b> of delivery with an unboxing photo or video.</li>
+        <li>Cash on Delivery — please check your parcel before paying.</li>
+        <li>For custom items we offer a free replacement, not a cash refund.</li>
+      </ul>
+    </details>
+    <div style="margin-top:12px">Aura Cases · তোমার ফোন, তোমার স্টাইল</div>
   </footer>
 </div>
 
@@ -533,17 +556,18 @@
         <div class="err" id="errAddress"></div>
       </div>
 
-      <div class="field">
+      <!-- Payment method hidden for now: COD only. bKash to be re-enabled later. -->
+      <div class="field" style="display:none;">
         <label>Payment method</label>
         <div class="radio-row">
-          <label class="radio"><input type="radio" name="pay" value="cod" /><span>Cash on Delivery</span></label>
+          <label class="radio"><input type="radio" name="pay" value="cod" checked /><span>Cash on Delivery</span></label>
           <label class="radio"><input type="radio" name="pay" value="bkash" /><span>bKash / Nagad</span></label>
         </div>
         <div class="err" id="errPay"></div>
       </div>
 
       <div class="submit-err" id="submitErr" style="display:none;"></div>
-      <button type="submit" class="big-btn" id="placeBtn" disabled>Place Order</button>
+      <button type="submit" class="big-btn" id="placeBtn" disabled>Place order</button>
     </form>
   </div>
 
@@ -924,9 +948,17 @@ function renderDesignBanner(){
 }
 
 // big preview of the selected design — always rendered (fixed height) → no page jump
+let _lastViewed = null;
 function renderDesignPreview(){
   const box = $("designPreview"); if(!box) return;
   const d = state.design, src = d ? (d.kind === "preset" ? d.image_url : d.url) : null;
+  // analytics: design viewed (once per distinct design)
+  if(d && window.track){
+    const key = d.kind === "preset" ? ("preset:" + d.id) : "upload";
+    if(key !== _lastViewed){ _lastViewed = key;
+      track("ViewContent", { content_type: "design",
+        content_name: d.kind === "preset" ? (d.name || "design") : "your photo" }); }
+  }
   if(src){
     box.innerHTML = `<div class="dp-img"><img src="${src}" alt="selected design" /></div>
       <div class="dp-cap"><span>${escapeHtml(d.kind === "preset" ? (d.name || "Selected design") : "Your photo")}</span><small>🔍 tap to zoom</small></div>`;
@@ -1125,6 +1157,11 @@ function openCheckout(){
   renderCheckoutPreview(); renderBill();
   drawer.classList.add("show"); overlay.classList.add("show");
   showView("checkout");
+  // analytics: reached checkout
+  if(window.track){ const it = state.cart[0]; track("InitiateCheckout", {
+    value: it ? it.price : 0, currency: "BDT",
+    content_name: it ? (it.caseType + " — " + it.model) : ""
+  }); }
 }
 $("addBtn").onclick = () => {
   if(!(state.model && state.caseType && state.design)) return;
@@ -1447,15 +1484,26 @@ function showConfirmation({orderId, data, totals}){
     + `<div class="row grand"><span>Grand total</span><b>${taka(grand)}</b></div>`;
   $("confBill").innerHTML = bill;
 
+  const eta = data.area === "insideDhaka"
+    ? "Inside Dhaka — delivery in <b>1–4 days</b>."
+    : "Outside Dhaka — delivery in <b>5–7 days</b>.";
+
   const next = $("confNext");
   if(data.pay === "bkash"){
     next.innerHTML = `We'll call you on <b>${escapeHtml(data.mobile)}</b> to confirm.<br><br>
       To pay now, send <b>${taka(grand)}</b> to <b>${escapeHtml(SETTINGS.bkash_number)}</b> (bKash/Nagad)
-      and put your order ID <b>${orderId}</b> as the reference.`;
+      and put your order ID <b>${orderId}</b> as the reference.<br><br>${eta}`;
   } else {
     next.innerHTML = `We'll call you on <b>${escapeHtml(data.mobile)}</b> to confirm your order.<br><br>
-      Payment is <b>Cash on Delivery</b> — pay <b>${taka(grand)}</b> when it arrives.`;
+      Payment is <b>Cash on Delivery</b> — pay <b>${taka(grand)}</b> when it arrives.<br><br>${eta}`;
   }
+
+  // analytics: order completed
+  if(window.track) track("Purchase", {
+    value: grand, currency: "BDT", order_id: orderId,
+    content_type: "product",
+    contents: state.cart.map(it => ({ id: it.caseTypeId, item_name: it.caseType, model: it.model }))
+  });
 
   showView("confirm");
   // order placed: clear the cart + promo
