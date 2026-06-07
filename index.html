@@ -544,13 +544,23 @@ function indexPhones(rows){
 }
 
 async function loadPhones(){
-  let rows = readCache("cb_phones_v2");
+  let rows = readCache("cb_phones_v3");
   if(!rows && sb){
     try{
-      const { data, error } = await sb.from("phones").select("brand,model_name,search_key,avail_2d,avail_3d,on_sheet").limit(5000);
-      if(error) throw error;
-      rows = data; writeCache("cb_phones_v2", rows);
-    }catch(_){ rows = readStale("cb_phones_v2"); }
+      // Supabase caps each response at 1000 rows regardless of .limit(),
+      // so page through with .range() until a short page comes back.
+      rows = [];
+      const CH = 1000;
+      for(let from = 0; ; from += CH){
+        const { data, error } = await sb.from("phones")
+          .select("brand,model_name,search_key,avail_2d,avail_3d,on_sheet")
+          .order("id").range(from, from + CH - 1);
+        if(error) throw error;
+        rows = rows.concat(data || []);
+        if(!data || data.length < CH) break;
+      }
+      writeCache("cb_phones_v3", rows);
+    }catch(_){ rows = readStale("cb_phones_v3"); }
   }
   indexPhones(rows || []);
 }
