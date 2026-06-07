@@ -565,7 +565,7 @@ function indexPhones(rows){
 }
 
 async function loadPhones(){
-  let rows = readCache("cb_phones_v4");
+  let rows = readCache("cb_phones_v5");
   if(!rows && sb){
     try{
       // Supabase caps each response at 1000 rows regardless of .limit(),
@@ -580,8 +580,8 @@ async function loadPhones(){
         rows = rows.concat(data || []);
         if(!data || data.length < CH) break;
       }
-      writeCache("cb_phones_v4", rows);
-    }catch(_){ rows = readStale("cb_phones_v4"); }
+      writeCache("cb_phones_v5", rows);
+    }catch(_){ rows = readStale("cb_phones_v5"); }
   }
   indexPhones(rows || []);
 }
