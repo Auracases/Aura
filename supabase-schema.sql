@@ -254,6 +254,41 @@ alter table public.orders add column if not exists note text default '';
 -- Admin tags (comma-separated, e.g. "urgent, reprint") for organizing/filtering orders.
 alter table public.orders add column if not exists tags text default '';
 
+-- Notification / export config (set from admin → Pricing & Settings).
+alter table public.settings add column if not exists telegram_token text default '';
+alter table public.settings add column if not exists telegram_chat  text default '';
+alter table public.settings add column if not exists sheet_webhook   text default '';   -- Apps Script web-app URL
+
+-- On every new order: ping Telegram + POST the order to a Google-Sheet Apps Script webhook.
+-- Async via pg_net so it never blocks/slows checkout; failures are swallowed.
+-- Requires: create extension if not exists pg_net;
+create or replace function public.notify_new_order() returns trigger
+language plpgsql security definer set search_path = public, extensions, net as $$
+declare s public.settings; items_txt text; msg text;
+begin
+  select * into s from public.settings where id = 1;
+  select string_agg('• ' || coalesce(i->>'caseType', i->>'name', 'item')
+                    || case when coalesce(i->>'model','') <> '' then ' (' || (i->>'model') || ')' else '' end, E'\n')
+    into items_txt from jsonb_array_elements(coalesce(NEW.items,'[]'::jsonb)) i;
+  msg := '🛒 New order ' || NEW.order_id || E'\n👤 ' || coalesce(NEW.name,'') || ' · ' || coalesce(NEW.mobile,'')
+       || E'\n' || coalesce(items_txt,'') || E'\n💵 ৳' || NEW.total || ' · ' || coalesce(NEW.payment_method,'')
+       || E'\n📍 ' || coalesce(NEW.area,'') || ' — ' || coalesce(NEW.address,'');
+  if coalesce(s.telegram_token,'') <> '' and coalesce(s.telegram_chat,'') <> '' then
+    begin perform net.http_post(
+      url := 'https://api.telegram.org/bot' || s.telegram_token || '/sendMessage',
+      headers := '{"Content-Type":"application/json"}'::jsonb,
+      body := jsonb_build_object('chat_id', s.telegram_chat, 'text', msg));
+    exception when others then null; end;
+  end if;
+  if coalesce(s.sheet_webhook,'') <> '' then
+    begin perform net.http_post(url := s.sheet_webhook, headers := '{"Content-Type":"application/json"}'::jsonb, body := to_jsonb(NEW));
+    exception when others then null; end;
+  end if;
+  return NEW;
+end $$;
+drop trigger if exists trg_new_order on public.orders;
+create trigger trg_new_order after insert on public.orders for each row execute function public.notify_new_order();
+
 -- Enable/disable a case type. Disabled types never show in the customize flow.
 alter table public.case_types add column if not exists active boolean default true;
 

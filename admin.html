@@ -194,8 +194,12 @@
         <button class="ghost" id="refreshOrders">Refresh</button>
       </div>
     </div>
-    <div class="row" style="margin-bottom:12px">
+    <div class="row" style="margin-bottom:8px">
       <input id="orderSearch" placeholder="Search name / mobile / order ID / tag…" class="grow" />
+    </div>
+    <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <select id="oFilStatus" style="max-width:170px"><option value="">All statuses</option><option>New</option><option>Processing</option><option>Shipped</option><option>Delivered</option><option>Cancelled</option></select>
+      <select id="oFilPay" style="max-width:190px"><option value="">All payments</option><option>Cash on Delivery</option><option>bKash/Nagad</option></select>
     </div>
     <div class="bulk-bar"><label class="row" style="gap:6px;margin:0"><input type="checkbox" id="oSelAll" /> Select visible</label>
       <span class="grow"></span><button class="danger" id="oDelSel">Delete selected</button></div>
@@ -310,6 +314,13 @@
         </div>
         <div style="flex:1 1 120px"><label>Value</label><input type="number" id="setSaleValue" /></div>
         <div style="flex:1 1 200px"><label>Label (shown at checkout)</label><input id="setSaleLabel" placeholder="Eid Sale" /></div>
+      </div>
+      <h3 style="margin-top:16px">Order notifications & export</h3>
+      <div class="muted" style="font-size:.8rem;margin-bottom:8px">On every new order, ping Telegram + append to a Google Sheet. Leave blank to disable. (Needs the <code>pg_net</code> extension — see SETUP.)</div>
+      <div class="wrap-row">
+        <div style="flex:1 1 100%"><label>Telegram bot token</label><input id="setTgToken" placeholder="123456:ABC-..." /></div>
+        <div style="flex:1 1 160px"><label>Telegram chat ID</label><input id="setTgChat" placeholder="-1001234567890" /></div>
+        <div style="flex:2 1 240px"><label>Google Sheet webhook URL (Apps Script)</label><input id="setSheet" placeholder="https://script.google.com/.../exec" /></div>
       </div>
       <div class="row" style="margin-top:12px;justify-content:space-between">
         <span id="setMsg" class="saved"></span>
@@ -705,6 +716,8 @@ $("refreshOrders").onclick = () => loadOrders(true);
 $("loadMoreOrders").onclick = () => loadOrders(false);
 let ordSearchTimer;
 $("orderSearch").addEventListener("input", () => { clearTimeout(ordSearchTimer); ordSearchTimer = setTimeout(()=>loadOrders(true), 300); });
+$("oFilStatus").onchange = () => loadOrders(true);
+$("oFilPay").onchange = () => loadOrders(true);
 $("oSelAll").onclick = (e) => document.querySelectorAll("#ordersList .o-pick").forEach(c => c.checked = e.target.checked);
 $("oDelSel").onclick = async () => {
   const ids = [...document.querySelectorAll("#ordersList .o-pick")].filter(c => c.checked).map(c => Number(c.dataset.oid));
@@ -717,9 +730,11 @@ $("oDelSel").onclick = async () => {
 
 async function loadOrders(reset){
   const box = $("ordersList");
-  if(reset){ ORD.offset = 0; ORD.done = false; ORD.q = $("orderSearch").value.trim(); box.innerHTML = `<div class="loading">Loading…</div>`; }
+  if(reset){ ORD.offset = 0; ORD.done = false; ORD.q = $("orderSearch").value.trim(); ORD.status = $("oFilStatus").value; ORD.pay = $("oFilPay").value; box.innerHTML = `<div class="loading">Loading…</div>`; }
   let query = sb.from("orders").select("*").order("created_at",{ascending:false}).range(ORD.offset, ORD.offset + ORD.PAGE - 1);
   if(ORD.q){ const like = `%${ORD.q}%`; query = query.or(`name.ilike.${like},mobile.ilike.${like},order_id.ilike.${like},tags.ilike.${like}`); }
+  if(ORD.status) query = query.eq("status", ORD.status);
+  if(ORD.pay) query = query.eq("payment_method", ORD.pay);
   const { data, error } = await query;
   if(error){ box.innerHTML = `<div class="loading">Couldn't load.</div>`; return; }
   if(reset) box.innerHTML = "";
@@ -1009,6 +1024,9 @@ async function loadSettings(){
     $("setSaleType").value = s.store_discount_type || "none";
     $("setSaleValue").value = s.store_discount_value ?? 0;
     $("setSaleLabel").value = s.store_discount_label || "";
+    $("setTgToken").value = s.telegram_token || "";
+    $("setTgChat").value = s.telegram_chat || "";
+    $("setSheet").value = s.sheet_webhook || "";
   }
 }
 $("saveSettings").onclick = async () => {
@@ -1021,7 +1039,10 @@ $("saveSettings").onclick = async () => {
     store_discount_active: $("setSaleActive").checked,
     store_discount_type: $("setSaleType").value,
     store_discount_value: Number($("setSaleValue").value) || 0,
-    store_discount_label: $("setSaleLabel").value.trim()
+    store_discount_label: $("setSaleLabel").value.trim(),
+    telegram_token: $("setTgToken").value.trim(),
+    telegram_chat: $("setTgChat").value.trim(),
+    sheet_webhook: $("setSheet").value.trim()
   }).eq("id", 1);
   msg.style.color = error ? "var(--bad)" : "var(--ok)";
   msg.textContent = error ? "Failed" : "Saved ✓";
