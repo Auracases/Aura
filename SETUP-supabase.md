@@ -80,3 +80,53 @@ You can also edit any table directly in the Supabase dashboard (**Table editor**
 - Buckets are public-read (image links work for anyone with the URL). Uploading
   designs requires the admin login; uploading order photos is allowed for the
   checkout flow only.
+
+---
+
+## Phone model list + availability sync
+
+The phone search is driven by a master model list; 2D/3D availability is a
+separate layer updated by two syncs (GSM master ~monthly, availability sheet
+~3×/week). One-time setup:
+
+1. **Apply the schema** — open Supabase → SQL Editor → paste all of
+   `supabase-schema.sql` → Run. (Safe to re-run.)
+2. **Seed sync sources** — in the SQL Editor, set the real URLs:
+   ```sql
+   update public.sync_sources set source_url =
+     'https://cdn.jsdelivr.net/gh/OWNER/REPO@main/data/phones-master.json' where key='gsm';
+   update public.sync_sources set source_url = 'PASTE_APPS_SCRIPT_URL' where key='sheet';
+   ```
+3. **Enable extensions** — SQL Editor:
+   ```sql
+   create extension if not exists pg_cron;
+   create extension if not exists pg_net;
+   ```
+4. **Deploy the Edge Function** — install the Supabase CLI, then:
+   ```bash
+   supabase functions deploy sync --project-ref <PROJECT_REF>
+   supabase secrets set CRON_SECRET=<a-long-random-string> --project-ref <PROJECT_REF>
+   ```
+   (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.)
+5. **Schedule the daily cron** — SQL Editor, replacing `<PROJECT_REF>` and `<CRON_SECRET>`:
+   ```sql
+   select cron.schedule('phone-sync-daily', '0 3 * * *', $$
+     select net.http_post(
+       url := 'https://<PROJECT_REF>.functions.supabase.co/sync',
+       headers := '{"content-type":"application/json","x-cron-secret":"<CRON_SECRET>"}'::jsonb,
+       body := '{"source":"gsm"}'::jsonb);
+     select net.http_post(
+       url := 'https://<PROJECT_REF>.functions.supabase.co/sync',
+       headers := '{"content-type":"application/json","x-cron-secret":"<CRON_SECRET>"}'::jsonb,
+       body := '{"source":"sheet"}'::jsonb);
+   $$);
+   ```
+   The function self-gates on each source's `frequency_days`, so the daily fire
+   only actually runs a source when it's due.
+6. **First seed** — in admin.html → Phones tab → "Run now". Run the **Availability
+   sheet first** (marks the existing models `on_sheet=true`), **then** GSM master
+   (adds the rest of the catalog as search-only). GSM seeds the master list; the
+   sheet layers availability on top.
+
+Manual edits in the Phones tab pin a model (`manual_override`); the sheet sync
+skips pinned rows. Click "Release" to let a model rejoin sheet sync.
