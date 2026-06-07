@@ -898,7 +898,7 @@ function renderDesignBanner(){
   const b = $("designBanner"), d = state.design;
   if(d && d.kind === "preset" && d.id != null){
     $("dbThumb").style.backgroundImage = `url('${d.image_url}')`;
-    $("dbName").textContent = d.name || "Selected design";
+    $("dbName").textContent = "Selected ✓";   // designs have no customer-facing name (filenames)
     b.classList.add("show");
   } else {
     b.classList.remove("show");
