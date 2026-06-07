@@ -864,8 +864,7 @@ function renderDesigns(){
     tile.title = d.context || "";
     if(state.design && state.design.kind === "preset" && String(state.design.id) === String(d.id)) tile.classList.add("selected");
     tile.innerHTML = `<div class="art" style="background-image:url('${d.image_url}');background-size:cover;background-position:center"></div>
-                      <button class="dz-zoom" title="Zoom">🔍</button>
-                      <div class="d-name">${escapeHtml(d.name)}</div>`;
+                      <button class="dz-zoom" title="Zoom">🔍</button>`;
     tile.querySelector(".dz-zoom").onclick = (e) => { e.stopPropagation(); const imgs = currentDesignImages(); openGallery(imgs, imgs.findIndex(x => String(x.id) === String(d.id))); };
     tile.onclick = () => {
       state.design = {kind:"preset", ...d};
@@ -1077,7 +1076,7 @@ function refreshSummary(){
   s.innerHTML = `
     <div class="row"><span>Phone</span><b>${escapeHtml(state.model.name)}</b></div>
     <div class="row"><span>Case</span><b>${state.caseType.name}</b></div>
-    <div class="row"><span>Design</span><b>${escapeHtml(state.design.name)}${state.name ? ' + "'+escapeHtml(state.name)+'"' : ""}</b></div>
+    <div class="row"><span>Design</span><b style="display:flex;align-items:center;gap:8px">${state.design.kind === "upload" ? "Your photo" : "Selected ✓"} <span style="width:30px;height:38px;border-radius:6px;border:1.5px solid var(--ink);background:url('${state.design.kind === "preset" ? state.design.image_url : state.design.url}') center/cover;display:inline-block;flex-shrink:0"></span></b></div>
     <div class="row total"><span>Price</span><b>${taka(state.caseType.price)}</b></div>`;
   s.classList.add("show");
 }
@@ -1133,7 +1132,7 @@ function renderCart(){
       <div class="ci-thumb" style="${thumbStyle}">${thumbImg ? "" : "🖼️"}</div>
       <div class="ci-info">
         <div class="t">${item.caseType} · ${taka(item.price)}</div>
-        <div class="s">${escapeHtml(item.model)} — ${escapeHtml(item.design)}${item.name ? ' + "'+escapeHtml(item.name)+'"' : ""}</div>
+        <div class="s">${escapeHtml(item.model)} — ${item.designKind === "upload" ? "your photo" : "design"}${item.name ? ' + "'+escapeHtml(item.name)+'"' : ""}</div>
       </div>
       <button class="ci-x" data-i="${i}">✕</button>`;
     el.querySelector(".ci-x").onclick = () => {
@@ -1238,7 +1237,7 @@ function renderBill(){
   const rows = state.cart.map(it => `
     <div class="row">
       <span>${escapeHtml(it.caseType)} — ${escapeHtml(it.model)}
-        <span class="s">${escapeHtml(it.design)}${it.name ? ' · "'+escapeHtml(it.name)+'"' : ""}</span>
+        <span class="s">${it.designKind === "upload" ? "your photo" : "design"}${it.name ? ' · "'+escapeHtml(it.name)+'"' : ""}</span>
       </span>
       <b>${taka(it.price)}</b>
     </div>`).join("");
