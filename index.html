@@ -630,7 +630,7 @@ async function loadCaseTypes(){
   if(!sb) return;
   try{
     const { data, error } = await sb.from("case_types").select("*").order("sort");
-    if(!error && data && data.length) CASES = data;
+    if(!error && data){ const act = data.filter(c => c.active !== false); if(act.length) CASES = act; }
   }catch(_){}
 }
 

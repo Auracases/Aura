@@ -779,15 +779,17 @@ async function loadSettings(){
   (cases||[]).forEach(c => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td style="width:36%"><b>${esc(c.name)}</b><div class="muted" style="font-size:.78rem">${esc(c.id)}</div></td>
-      <td style="width:22%"><label>Price</label><input type="number" class="c-price" value="${c.price}" /></td>
+      <td style="width:34%"><b>${esc(c.name)}</b><div class="muted" style="font-size:.78rem">${esc(c.id)}</div></td>
+      <td style="width:20%"><label>Price</label><input type="number" class="c-price" value="${c.price}" /></td>
       <td><label>Description</label><input class="c-descr" value="${esc(c.descr||"")}" /></td>
+      <td style="width:70px"><label>Active</label><input type="checkbox" class="c-active" ${c.active!==false?"checked":""} style="width:auto" /></td>
       <td style="width:90px;text-align:right"><button class="ghost c-save" style="padding:6px 10px">Save</button><div class="saved"></div></td>`;
     tr.querySelector(".c-save").onclick = async (e) => {
       e.target.disabled = true;
       const { error } = await sb.from("case_types").update({
         price: Number(tr.querySelector(".c-price").value) || 0,
-        descr: tr.querySelector(".c-descr").value.trim()
+        descr: tr.querySelector(".c-descr").value.trim(),
+        active: tr.querySelector(".c-active").checked
       }).eq("id", c.id);
       const sv = tr.querySelector(".saved"); sv.textContent = error?"Failed":"Saved ✓"; e.target.disabled = false;
       setTimeout(()=>sv.textContent="",1500);

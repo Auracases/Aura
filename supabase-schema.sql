@@ -248,6 +248,9 @@ alter table public.phones add column if not exists on_sheet        boolean defau
 -- Admin-only note on an order (shown in the admin Orders tab; never to customers).
 alter table public.orders add column if not exists note text default '';
 
+-- Enable/disable a case type. Disabled types never show in the customize flow.
+alter table public.case_types add column if not exists active boolean default true;
+
 -- Demo gallery (demos.html), fully admin-managed. Categories are free-form and
 -- independent of the customize case_types. Each category can show an "Order now"
 -- button linking anywhere (a ready-made product page, a collection, or the
