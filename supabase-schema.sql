@@ -248,22 +248,57 @@ alter table public.phones add column if not exists on_sheet        boolean defau
 -- Admin-only note on an order (shown in the admin Orders tab; never to customers).
 alter table public.orders add column if not exists note text default '';
 
--- Demo gallery: images/videos per case type, shown on demos.html (admin-managed).
-create table if not exists public.demos (
-  id         bigint generated always as identity primary key,
-  case_key   text not null,                    -- tpu | uv | d2 | d3 | custom
-  media_type text not null default 'image',    -- image | video
-  url        text not null,
-  caption    text default '',
-  sort       int  default 0,
-  active     boolean default true,
-  created_at timestamptz default now()
+-- Demo gallery (demos.html), fully admin-managed. Categories are free-form and
+-- independent of the customize case_types. Each category can show an "Order now"
+-- button linking anywhere (a ready-made product page, a collection, or the
+-- customize flow); each demo item can also carry its own order link.
+create table if not exists public.demo_categories (
+  id          bigint generated always as identity primary key,
+  name        text not null unique,
+  sort        int  default 0,
+  active      boolean default true,
+  show_order  boolean default false,           -- show an "Order now" button on this section
+  order_label text default 'Order now',
+  order_url   text default '',                 -- where the button goes (blank = customize flow)
+  created_at  timestamptz default now()
 );
+alter table public.demo_categories enable row level security;
+drop policy if exists "public read demo_categories" on public.demo_categories;
+create policy "public read demo_categories" on public.demo_categories for select to anon, authenticated using (true);
+drop policy if exists "admin all demo_categories" on public.demo_categories;
+create policy "admin all demo_categories" on public.demo_categories for all to authenticated using (true) with check (true);
+
+create table if not exists public.demos (
+  id          bigint generated always as identity primary key,
+  category_id bigint references public.demo_categories(id) on delete cascade,
+  case_key    text default '',                 -- legacy (pre-categories); ignored once migrated
+  media_type  text not null default 'image',   -- image | video
+  url         text not null,
+  caption     text default '',
+  order_url   text default '',                 -- optional per-item order link (overrides category)
+  sort        int  default 0,
+  active      boolean default true,
+  created_at  timestamptz default now()
+);
+alter table public.demos add column if not exists category_id bigint references public.demo_categories(id) on delete cascade;
+alter table public.demos add column if not exists order_url   text default '';
 alter table public.demos enable row level security;
 drop policy if exists "public read demos" on public.demos;
 create policy "public read demos" on public.demos for select to anon, authenticated using (true);
 drop policy if exists "admin all demos" on public.demos;
 create policy "admin all demos" on public.demos for all to authenticated using (true) with check (true);
+
+-- Seed 4 starter demo categories + migrate any pre-categories demos by case_key.
+insert into public.demo_categories (name, sort) values
+  ('TPU Soft',1),('UV Printed',2),('2D Hard Case',3),('3D Hard Case',4)
+on conflict (name) do nothing;
+update public.demos d set category_id = c.id
+from public.demo_categories c
+where d.category_id is null and (
+     (d.case_key='tpu' and c.name='TPU Soft')
+  or (d.case_key='uv'  and c.name='UV Printed')
+  or (d.case_key='d2'  and c.name='2D Hard Case')
+  or (d.case_key='d3'  and c.name='3D Hard Case'));
 
 create table if not exists public.sync_sources (
   key            text primary key,         -- 'gsm' | 'sheet'

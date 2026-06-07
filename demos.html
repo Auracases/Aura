@@ -47,6 +47,11 @@
   .type-info .ti-sub{color:var(--ink-soft);font-size:.9rem;margin-top:2px;}
   .type-info .ti-price{display:inline-block;margin-top:6px;background:#FFF1EC;color:var(--accent-dark);
     border:1.5px solid var(--accent);border-radius:9px;padding:3px 10px;font-weight:700;font-size:.85rem;}
+  .section-cta{margin:12px 0 2px;}
+  .section-cta a{display:inline-block;background:var(--accent);color:#fff;border:2px solid var(--ink);
+    border-radius:12px;padding:11px 20px;font-weight:700;text-decoration:none;box-shadow:2px 2px 0 var(--ink);font-size:.95rem;}
+  .media .order-tag{position:absolute;bottom:7px;right:7px;z-index:2;background:var(--accent);color:#fff;
+    border:none;border-radius:9px;padding:6px 11px;font-size:.76rem;font-weight:700;text-decoration:none;cursor:pointer;}
 
   /* gallery */
   .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin:16px 0 60px;}
@@ -100,74 +105,69 @@ const taka = n => "৳" + (n==null?0:n);
 const sb = (typeof supabase !== "undefined" && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_URL.startsWith("http"))
   ? supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY) : null;
 
-// case types (+ a synthetic Custom pill); demos grouped by case_key
-let TYPES = [
-  { key:"tpu", name:"TPU Soft",   descr:"Flexible, slim, shock-friendly" },
-  { key:"uv",  name:"UV Printed", descr:"Vivid print, glossy finish" },
-  { key:"d2",  name:"2D Hard Case", descr:"Hard back, flat print" },
-  { key:"d3",  name:"3D Hard Case", descr:"Print wraps the edges" },
-];
+// demo categories (admin-managed) + demos grouped by category_id
+let CATS = [];
 let DEMOS = [];
-let activeKey = null;
+let activeId = null;
 
 async function load(){
   if(sb){
     try{
-      const { data: cts } = await sb.from("case_types").select("*").order("sort");
-      if(cts && cts.length) TYPES = cts.map(c => ({ key:c.id, name:c.name, descr:c.descr||"", price:c.price }));
-    }catch(_){}
+      const { data } = await sb.from("demo_categories").select("*").eq("active", true).order("sort");
+      CATS = data || [];
+    }catch(_){ CATS = []; }
     try{
-      const { data } = await sb.from("demos").select("*").eq("active", true).order("sort").limit(2000);
+      const { data } = await sb.from("demos").select("*").eq("active", true).order("sort").limit(3000);
       DEMOS = data || [];
     }catch(_){ DEMOS = []; }
   }
   renderPills();
 }
 
-function allTypes(){ return TYPES; }
-
 function renderPills(){
   const box = $("pills"); box.innerHTML = "";
-  const types = allTypes();
-  // default to the first type that has demos, else the first type
-  if(!activeKey){
-    const withDemos = types.find(t => DEMOS.some(d => d.case_key === t.key));
-    activeKey = (withDemos || types[0]).key;
+  if(!CATS.length){ $("typeInfo").innerHTML = ""; $("gallery").innerHTML = `<div class="empty">No demos yet.</div>`; return; }
+  if(activeId == null){
+    const withDemos = CATS.find(c => DEMOS.some(d => d.category_id === c.id));
+    activeId = (withDemos || CATS[0]).id;
   }
-  types.forEach(t => {
+  CATS.forEach(c => {
     const b = document.createElement("button");
-    b.className = "pill" + (t.key === activeKey ? " active" : "");
-    b.textContent = t.name;
-    b.onclick = () => { activeKey = t.key; renderPills(); renderGallery(); };
+    b.className = "pill" + (c.id === activeId ? " active" : "");
+    b.textContent = c.name;
+    b.onclick = () => { activeId = c.id; renderPills(); };
     box.appendChild(b);
   });
   renderGallery();
 }
 
 function renderGallery(){
-  const t = allTypes().find(x => x.key === activeKey) || allTypes()[0];
-  $("typeInfo").innerHTML = `
-    <div class="ti-name">${esc(t.name)}</div>
-    <div class="ti-sub">${esc(t.descr || "")}</div>
-    ${t.price != null ? `<div class="ti-price">from ${taka(t.price)}</div>` : ""}`;
+  const cat = CATS.find(c => c.id === activeId) || CATS[0];
+  const cta = cat.show_order
+    ? `<div class="section-cta"><a href="${esc(cat.order_url || "index.html")}">${esc(cat.order_label || "Order now")} →</a></div>`
+    : "";
+  $("typeInfo").innerHTML = `<div class="ti-name">${esc(cat.name)}</div>${cta}`;
   const box = $("gallery");
-  const items = DEMOS.filter(d => d.case_key === activeKey);
+  const items = DEMOS.filter(d => d.category_id === cat.id);
   if(!items.length){ box.innerHTML = `<div class="empty">No demos here yet — check back soon.</div>`; return; }
   box.innerHTML = "";
   items.forEach(d => {
     const cell = document.createElement("div");
     cell.className = "media";
+    const orderTag = d.order_url ? `<a class="order-tag" href="${esc(d.order_url)}">Order →</a>` : "";
     if(d.media_type === "video"){
       cell.innerHTML = `
         <span class="vtag">▶ VIDEO</span>
         <video src="${esc(d.url)}#t=0.1" controls playsinline preload="metadata"></video>
         <button class="expand" title="Fullscreen">⛶</button>
+        ${orderTag}
         ${d.caption ? `<div class="cap">${esc(d.caption)}</div>` : ""}`;
       cell.querySelector(".expand").onclick = (e) => { e.stopPropagation(); openLightbox(d.url, "video"); };
     } else {
       cell.innerHTML = `
         <img loading="lazy" src="${esc(d.url)}" alt="${esc(d.caption||"demo")}" />
         <button class="expand" title="Zoom">🔍</button>
+        ${orderTag}
         ${d.caption ? `<div class="cap">${esc(d.caption)}</div>` : ""}`;
       const img = cell.querySelector("img");
       img.onload = () => img.classList.add("loaded");
