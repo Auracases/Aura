@@ -284,6 +284,9 @@ create table if not exists public.demos (
 alter table public.demos add column if not exists category_id bigint references public.demo_categories(id) on delete cascade;
 alter table public.demos add column if not exists order_url   text default '';
 alter table public.demos add column if not exists show_order  boolean default false;  -- per-item Order button
+-- legacy case_key is no longer used (categories replaced it); make it optional.
+alter table public.demos alter column case_key drop not null;
+alter table public.demos alter column case_key set default '';
 alter table public.demos enable row level security;
 drop policy if exists "public read demos" on public.demos;
 create policy "public read demos" on public.demos for select to anon, authenticated using (true);

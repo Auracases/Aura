@@ -1071,7 +1071,7 @@ $("dmAddBtn").onclick = async () => {
       media_type = /\.(mp4|webm|mov|m4v|ogg)(\?|$)/i.test(urlIn) ? "video" : "image";
     }
     const { error } = await sb.from("demos").insert({
-      category_id: Number(category_id), media_type, url,
+      category_id: Number(category_id), media_type, url, case_key: "",
       caption: $("dmCaption").value.trim(), order_url: $("dmOrder").value.trim(), sort: 0, active: true
     });
     if(error) throw error;
