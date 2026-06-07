@@ -64,6 +64,14 @@
     display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;padding:0 5px;
   }
 
+  /* ---------- store-wide sale banner ---------- */
+  .sale-banner{
+    display:none;background:var(--accent);color:#fff;border:2px solid var(--ink);
+    border-radius:14px;box-shadow:var(--shadow);padding:12px 16px;margin-top:14px;
+    font-weight:700;text-align:center;font-size:.95rem;letter-spacing:.01em;
+  }
+  .sale-banner.show{display:block;}
+
   /* ---------- hero ---------- */
   .hero{padding:26px 0 8px;}
   .hero h1{
@@ -297,6 +305,9 @@
     <h1>Custom cases,<br>made for <em>your</em> phone.</h1>
     <p>Pick your model — we'll instantly show what's available and the price. No more waiting for replies.</p>
   </section>
+
+  <!-- store-wide sale banner (shown when an active store discount is set in admin) -->
+  <div id="saleBanner" class="sale-banner"></div>
 
   <!-- ============ STEP 1 : PHONE MODEL ============ -->
   <section class="step active" id="step1">
@@ -1185,8 +1196,28 @@ renderDesigns();   // renders empty/fallback immediately
 (async () => {
   await Promise.all([loadPhones(), loadCaseTypes(), loadDesigns(), loadSettings()]);
   renderDesigns();                       // swap in live designs
+  renderSaleBanner();                    // show store-wide sale up top, if active
   if(state.model) renderCases();         // refresh cases if a model is already picked
 })();
+
+/* Store-wide sale banner — visible to everyone on the front page when an active
+   store discount is set in admin (separate from the per-order checkout line). */
+function renderSaleBanner(){
+  const b = $("saleBanner");
+  if(!b) return;
+  if(SETTINGS && SETTINGS.store_discount_active){
+    const v = SETTINGS.store_discount_value;
+    const txt = (SETTINGS.store_discount_label && SETTINGS.store_discount_label.trim())
+      ? SETTINGS.store_discount_label.trim()
+      : (SETTINGS.store_discount_type === "percent" ? `${v}% OFF — storewide sale`
+        : SETTINGS.store_discount_type === "flat" ? `৳${v} OFF every order`
+        : "Sale on now");
+    b.textContent = "🎉 " + txt;
+    b.classList.add("show");
+  } else {
+    b.classList.remove("show");
+  }
+}
 </script>
 </body>
 </html>

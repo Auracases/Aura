@@ -201,17 +201,8 @@
     </div>
 
     <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
-        <h3 style="margin:0">Availability sheet models <span id="sheetCount" class="muted" style="font-size:.8rem"></span></h3>
-        <input id="sheetFilter" placeholder="Filter…" style="max-width:200px" />
-      </div>
-      <div class="muted" style="font-size:.8rem;margin:6px 0">Models from the Google Sheet — loaded here so you can manage 2D/3D fast.</div>
-      <div id="sheetList"><div class="loading">Loading…</div></div>
-    </div>
-
-    <div class="card">
-      <h3>Search all models (incl. GSM master)</h3>
-      <div class="muted" style="font-size:.8rem;margin-bottom:8px">The full catalog is large — search to find any model and set its availability.</div>
+      <h3>Search & manage models</h3>
+      <div class="muted" style="font-size:.8rem;margin-bottom:8px">Search any model (sheet + GSM master) to set its 2D/3D availability, or add a new one.</div>
       <div class="wrap-row" style="align-items:flex-end">
         <div style="flex:1 1 160px"><label>Brand</label><input id="phBrand" placeholder="Samsung" /></div>
         <div style="flex:1 1 200px"><label>Model name</label><input id="phModel" placeholder="Galaxy A15" /></div>
@@ -286,8 +277,7 @@ function showApp(){
 
 /* ================= TABS ================= */
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
-const LOADERS = { designs:loadDesigns, orders:loadOrders, promos:loadPromos, settings:loadSettings, phones:loadPhonesTab };
-function loadPhonesTab(){ loadSync(); loadSheetList(); }
+const LOADERS = { designs:loadDesigns, orders:loadOrders, promos:loadPromos, settings:loadSettings, phones:loadSync };
 function switchTab(tab){
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
   ["designs","orders","promos","settings","phones"].forEach(t => $("tab-"+t).classList.toggle("hidden", t !== tab));
@@ -555,26 +545,6 @@ function phoneTableShell(box){
   return box.querySelector("tbody");
 }
 
-/* ---- sheet list: auto-loaded, fast, on_sheet=true only ---- */
-let SHEET_ROWS = [];
-async function loadSheetList(){
-  const box = $("sheetList");
-  const { data, error } = await sb.from("phones").select("*").eq("on_sheet", true).order("model_name").limit(2000);
-  if(error){ box.innerHTML = `<div class="loading">Couldn't load.</div>`; return; }
-  SHEET_ROWS = data || [];
-  $("sheetCount").textContent = `(${SHEET_ROWS.length})`;
-  renderSheetList();
-}
-function renderSheetList(){
-  const box = $("sheetList");
-  const q = norm($("sheetFilter").value || "");
-  const rows = q ? SHEET_ROWS.filter(p => norm(p.model_name).includes(q) || norm(p.brand).includes(q)) : SHEET_ROWS;
-  if(!rows.length){ box.innerHTML = `<div class="loading">No models.</div>`; return; }
-  const tb = phoneTableShell(box);
-  rows.forEach(p => renderPhoneRow(tb, p, loadSheetList));
-}
-$("sheetFilter").addEventListener("input", () => { clearTimeout(window._sf); window._sf = setTimeout(renderSheetList, 150); });
-
 /* ---- automatic sync panel ---- */
 async function loadSync(){
   const box = $("syncRows");
@@ -630,7 +600,7 @@ $("addPhone").onclick = async () => {
   }, { onConflict: "search_key" });
   if(error){ m.textContent = error.message; return; }
   $("phBrand").value = ""; $("phModel").value = ""; $("ph2d").checked = false; $("ph3d").checked = false;
-  loadSheetList();
+  m.style.color = ""; m.textContent = "Added ✓";
   if($("phSearch").value.trim()) runPhoneSearch();
 };
 
