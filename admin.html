@@ -524,12 +524,18 @@ async function ensureShopData(){
   if(!CASE_TYPES){ const { data } = await sb.from("case_types").select("*").order("sort"); CASE_TYPES = data || []; }
   if(!SHOP){ const { data } = await sb.from("settings").select("*").eq("id",1).single(); SHOP = data || { delivery_inside:70, delivery_outside:130 }; }
   if(!ADMIN_PHONES){
-    // load all phones once into memory for fast client-side search (Supabase caps 1000/req)
-    let rows = []; const CH = 1000;
-    for(let from = 0; ; from += CH){
-      const { data, error } = await sb.from("phones").select("model_name,search_key,avail_2d,avail_3d").order("id").range(from, from+CH-1);
-      if(error) break; rows = rows.concat(data || []);
-      if(!data || data.length < CH) break;
+    // reuse the storefront's localStorage cache for an instant load if present…
+    let rows = null;
+    try{ const c = JSON.parse(localStorage.getItem("cb_phones_v5") || "null"); if(c && c.data && c.data.length) rows = c.data; }catch(_){}
+    if(!rows){
+      // …otherwise page through (Supabase caps 1000/req) and cache it for next time
+      rows = []; const CH = 1000;
+      for(let from = 0; ; from += CH){
+        const { data, error } = await sb.from("phones").select("brand,model_name,search_key,avail_2d,avail_3d,on_sheet").order("id").range(from, from+CH-1);
+        if(error) break; rows = rows.concat(data || []);
+        if(!data || data.length < CH) break;
+      }
+      try{ localStorage.setItem("cb_phones_v5", JSON.stringify({ ts: Date.now(), data: rows })); }catch(_){}
     }
     ADMIN_PHONES = rows;
     ADMIN_AVAIL = new Map();
@@ -671,29 +677,30 @@ function addManualItem(){
     const a = adminAvail(name);
     availHint.innerHTML = `Availability for <b>${esc(name)}</b>: 2D ${a.d2?"✓":"✗"} · 3D ${a.d3?"✓":"✗"} — TPU/UV always. <span class="muted">(You can still pick any case.)</span>`;
   }
-  let t;
-  modelInput.addEventListener("input", () => {
-    clearTimeout(t);
+  modelInput.addEventListener("input", () => {   // no debounce — in-memory, instant like the storefront
     showAvail(modelInput.value);
     const q = norm(modelInput.value);
     if(modelInput.value.trim().length < 2){ sug.classList.remove("open"); return; }
-    t = setTimeout(() => {
-      const hits = [];
-      for(const p of (ADMIN_PHONES || [])){
-        const np = p.search_key || norm(p.model_name);
-        if(np.includes(q)){ hits.push({ p, starts: np.startsWith(q) }); }
-        if(hits.length >= 40) break;
-      }
-      hits.sort((a,b) => (b.starts?1:0) - (a.starts?1:0) || a.p.model_name.localeCompare(b.p.model_name));
-      sug.innerHTML = "";
-      hits.slice(0,8).forEach(({p}) => {
-        const b = document.createElement("button");
-        b.type = "button"; b.textContent = p.model_name;
-        b.onclick = () => { modelInput.value = p.model_name; showAvail(p.model_name); sug.classList.remove("open"); };
-        sug.appendChild(b);
-      });
-      sug.classList.toggle("open", sug.children.length > 0);
-    }, 50);   // in-memory → fast
+    const hits = [];
+    for(const p of (ADMIN_PHONES || [])){
+      const np = p.search_key || norm(p.model_name);
+      if(np.includes(q)){ hits.push({ p, starts: np.startsWith(q) }); }
+      if(hits.length >= 40) break;
+    }
+    hits.sort((a,b) => (b.starts?1:0) - (a.starts?1:0) || a.p.model_name.localeCompare(b.p.model_name));
+    sug.innerHTML = "";
+    hits.slice(0,8).forEach(({p}) => {
+      const a = { d2:!!p.avail_2d, d3:!!p.avail_3d };
+      const b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = `<span>${esc(p.model_name)}</span>
+        <span style="float:right;font-size:.66rem;font-weight:700">
+          ${a.d2?'<span style="color:#137a4b">2D </span>':''}${a.d3?'<span style="color:#137a4b">3D </span>':''}<span style="color:#999">TPU·UV</span>
+        </span>`;
+      b.onclick = () => { modelInput.value = p.model_name; showAvail(p.model_name); sug.classList.remove("open"); };
+      sug.appendChild(b);
+    });
+    sug.classList.toggle("open", sug.children.length > 0);
   });
   modelInput.addEventListener("blur", () => setTimeout(()=>sug.classList.remove("open"), 150));
 
