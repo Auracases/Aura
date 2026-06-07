@@ -774,29 +774,25 @@ function renderCases(){
   const m = state.model;
   const av = availFor(m.name);   // live 2D/3D availability for this model
   const caseOk = c => c.always_available || (c.requires === "2d" ? av.d2 : c.requires === "3d" ? av.d3 : false);
-  let anyUnavail = false;
 
   for(const c of CASES){
-    const ok = caseOk(c);
-    if(!ok) anyUnavail = true;
+    if(!caseOk(c)) continue;   // only show case types available for this phone
 
     const card = document.createElement("div");
-    card.className = "case-card" + (ok ? "" : " unavail");
+    card.className = "case-card";
     card.innerHTML = `
       <h3>${escapeHtml(c.name)}</h3>
       <div class="price">${taka(c.price)}</div>
       <div class="desc">${escapeHtml(c.descr || "")}</div>
-      <span class="avail-tag ${ok ? "t-ok" : "t-no"}">${ok ? "Available ✓" : "Not for this model"}</span>`;
-    if(ok){
-      card.onclick = () => {
-        state.caseType = c;
-        document.querySelectorAll(".case-card").forEach(el=>el.classList.remove("selected"));
-        card.classList.add("selected");
-        $("step3").classList.add("active");
-        $("step3").scrollIntoView({behavior:"smooth", block:"start"});
-        refreshSummary();
-      };
-    }
+      <span class="avail-tag t-ok">Available ✓</span>`;
+    card.onclick = () => {
+      state.caseType = c;
+      document.querySelectorAll(".case-card").forEach(el=>el.classList.remove("selected"));
+      card.classList.add("selected");
+      $("step3").classList.add("active");
+      $("step3").scrollIntoView({behavior:"smooth", block:"start"});
+      refreshSummary();
+    };
     const demos = demosForCase(c);
     if(demos.length){
       const dl = document.createElement("span");
@@ -808,14 +804,7 @@ function renderCases(){
     grid.appendChild(card);
   }
 
-  const note = $("unavailNote");
-  if(anyUnavail){
-    const missing = CASES.filter(c => !caseOk(c)).map(c=>c.name).join(" & ");
-    note.innerHTML = `ℹ️ <b>${missing}</b> ${missing.includes("&")?"aren't":"isn't"} available for <b>${escapeHtml(m.name)}</b> yet — but TPU Soft &amp; UV Printed always are.`;
-    note.classList.add("show");
-  } else {
-    note.classList.remove("show");
-  }
+  $("unavailNote").classList.remove("show");   // unavailable types are hidden, no note needed
 }
 
 /* ---------- designs ---------- */
