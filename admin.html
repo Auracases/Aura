@@ -518,10 +518,29 @@ $("bulkUploadBtn").onclick = async () => {
 
 /* ================= ORDERS ================= */
 const ORD = { offset:0, PAGE:30, q:"", done:false };
-let CASE_TYPES = null, SHOP = null;
+let CASE_TYPES = null, SHOP = null, ADMIN_PHONES = null, ADMIN_AVAIL = null;
 async function ensureShopData(){
   if(!CASE_TYPES){ const { data } = await sb.from("case_types").select("*").order("sort"); CASE_TYPES = data || []; }
   if(!SHOP){ const { data } = await sb.from("settings").select("*").eq("id",1).single(); SHOP = data || { delivery_inside:70, delivery_outside:130 }; }
+  if(!ADMIN_PHONES){
+    // load all phones once into memory for fast client-side search (Supabase caps 1000/req)
+    let rows = []; const CH = 1000;
+    for(let from = 0; ; from += CH){
+      const { data, error } = await sb.from("phones").select("model_name,search_key,avail_2d,avail_3d").order("id").range(from, from+CH-1);
+      if(error) break; rows = rows.concat(data || []);
+      if(!data || data.length < CH) break;
+    }
+    ADMIN_PHONES = rows;
+    ADMIN_AVAIL = new Map();
+    rows.forEach(p => ADMIN_AVAIL.set(p.search_key || norm(p.model_name), { d2:!!p.avail_2d, d3:!!p.avail_3d }));
+  }
+}
+// availability for a model name (admin), fuzzy via the same group-substring logic as storefront
+function adminAvail(name){
+  const k = norm(name); if(!k || !ADMIN_AVAIL) return { d2:false, d3:false };
+  if(ADMIN_AVAIL.has(k)) return ADMIN_AVAIL.get(k);
+  for(const [key, v] of ADMIN_AVAIL){ if(key.length >= 5 && (key.includes(k) || k.includes(key))) return v; }
+  return { d2:false, d3:false };
 }
 function orderItemsText(o){
   return (o.items||[]).map(it => `${it.caseType||it.caseTypeId||"item"} — ${it.model||""}${it.design?` · ${it.design}`:""}${it.name?` "${it.name}"`:""}${it.hasPhoto?" [photo]":""}`).join("\n");
@@ -624,6 +643,7 @@ function addManualItem(){
       <input class="mi-model" placeholder="Search phone model…" autocomplete="off" />
       <div class="mi-sug"></div>
     </div>
+    <div class="mi-avail muted" style="font-size:.78rem;margin:4px 0 2px"></div>
     <div class="li-row">
       <select class="mi-case" style="flex:1.6">${(CASE_TYPES||[]).map(c=>`<option value="${esc(c.id)}" data-price="${c.price}">${esc(c.name)} (${taka(c.price)})</option>`).join("")}</select>
       <input class="mi-price" type="number" min="0" style="flex:1;max-width:84px" />
@@ -643,24 +663,36 @@ function addManualItem(){
     photoName.textContent = item._photo ? `📎 ${item._photo.name}` : "";
   };
 
-  // phone-model autocomplete (server search over the phones table)
-  const modelInput = item.querySelector(".mi-model"), sug = item.querySelector(".mi-sug");
+  // phone-model autocomplete — fast, client-side over the in-memory list (like the storefront)
+  const modelInput = item.querySelector(".mi-model"), sug = item.querySelector(".mi-sug"), availHint = item.querySelector(".mi-avail");
+  function showAvail(name){
+    if(!name.trim()){ availHint.innerHTML = ""; return; }
+    const a = adminAvail(name);
+    availHint.innerHTML = `Availability for <b>${esc(name)}</b>: 2D ${a.d2?"✓":"✗"} · 3D ${a.d3?"✓":"✗"} — TPU/UV always. <span class="muted">(You can still pick any case.)</span>`;
+  }
   let t;
   modelInput.addEventListener("input", () => {
     clearTimeout(t);
-    const q = modelInput.value.trim();
-    if(q.length < 2){ sug.classList.remove("open"); return; }
-    t = setTimeout(async () => {
-      const { data } = await sb.from("phones").select("model_name").ilike("model_name", `%${q}%`).order("model_name").limit(8);
+    showAvail(modelInput.value);
+    const q = norm(modelInput.value);
+    if(modelInput.value.trim().length < 2){ sug.classList.remove("open"); return; }
+    t = setTimeout(() => {
+      const hits = [];
+      for(const p of (ADMIN_PHONES || [])){
+        const np = p.search_key || norm(p.model_name);
+        if(np.includes(q)){ hits.push({ p, starts: np.startsWith(q) }); }
+        if(hits.length >= 40) break;
+      }
+      hits.sort((a,b) => (b.starts?1:0) - (a.starts?1:0) || a.p.model_name.localeCompare(b.p.model_name));
       sug.innerHTML = "";
-      (data||[]).forEach(p => {
+      hits.slice(0,8).forEach(({p}) => {
         const b = document.createElement("button");
         b.type = "button"; b.textContent = p.model_name;
-        b.onclick = () => { modelInput.value = p.model_name; sug.classList.remove("open"); };
+        b.onclick = () => { modelInput.value = p.model_name; showAvail(p.model_name); sug.classList.remove("open"); };
         sug.appendChild(b);
       });
       sug.classList.toggle("open", sug.children.length > 0);
-    }, 250);
+    }, 50);   // in-memory → fast
   });
   modelInput.addEventListener("blur", () => setTimeout(()=>sug.classList.remove("open"), 150));
 
