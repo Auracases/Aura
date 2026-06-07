@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CaseBari — Custom Phone Cases</title>
+<title>Aura Cases — Custom Phone Cases</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -54,6 +54,10 @@
   .logo{font-family:var(--font-display);font-weight:800;font-size:1.45rem;letter-spacing:-.5px;line-height:1;}
   .logo span{color:var(--accent);}
   .logo small{display:block;font-family:var(--font-body);font-weight:500;font-size:.62rem;color:var(--ink-soft);letter-spacing:.05em;margin-top:2px;}
+  .nav-btn{
+    text-decoration:none;background:var(--accent);color:#fff;border:2px solid var(--ink);
+    border-radius:12px;padding:10px 18px;font-weight:700;font-size:.9rem;box-shadow:2px 2px 0 var(--ink);
+  }
   .cart-btn{
     position:relative;background:var(--ink);color:#fff;border:2px solid var(--ink);
     border-radius:12px;padding:9px 14px;font-family:var(--font-body);font-weight:700;font-size:.85rem;
@@ -380,11 +384,9 @@
 
 <header>
   <div class="head-in">
-    <div class="logo">Case<span>Bari</span><small>তোমার ফোন, তোমার স্টাইল</small></div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <a href="demos.html" style="text-decoration:none;color:var(--ink);font-weight:700;font-size:.82rem;border:2px solid var(--ink);border-radius:12px;padding:8px 12px;background:#fff">Demos</a>
-      <button class="cart-btn" id="cartBtn">Cart <span class="cart-count" id="cartCount">0</span></button>
-    </div>
+    <a href="index.html" class="logo" style="text-decoration:none;color:inherit">Aura <span>Cases</span><small>তোমার ফোন, তোমার স্টাইল</small></a>
+    <a href="demos.html" class="nav-btn">Demos</a>
+    <button class="cart-btn" id="cartBtn" style="display:none">Cart <span class="cart-count" id="cartCount">0</span></button>
   </div>
 </header>
 
@@ -469,7 +471,7 @@
   </section>
 
   <footer>
-    CaseBari · তোমার ফোন, তোমার স্টাইল
+    Aura Cases · তোমার ফোন, তোমার স্টাইল
   </footer>
 </div>
 
@@ -955,7 +957,7 @@ async function shareDesign(){
   if(!d || d.kind !== "preset" || d.id == null) return;
   const url = designLink(d.id);
   if(navigator.share){
-    try{ await navigator.share({ title: d.name || "CaseBari design", text: "Check out this phone case design", url }); return; }
+    try{ await navigator.share({ title: "Aura Cases design", text: "Check out this phone case design", url }); return; }
     catch(_){ /* user cancelled or unsupported → fall through to copy */ }
   }
   copyText(url);
