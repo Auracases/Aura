@@ -455,8 +455,15 @@ function showApp(){
   $("gate").classList.add("hidden");
   $("app").classList.remove("hidden");
   $("logoutBtn").classList.remove("hidden");
-  loadDesigns();
   ensureShopData();   // preload case types + settings + phone list in the background → instant manual-order search
+  // deep-link from a Telegram order alert: admin.html?order=<order_id>
+  const oid = new URLSearchParams(location.search).get("order");
+  if(oid){ switchTab("orders"); openOrderById(oid); }
+  else loadDesigns();
+}
+async function openOrderById(oid){
+  const { data } = await sb.from("orders").select("*").eq("order_id", oid).single();
+  if(data) openOrder(data);
 }
 
 /* ================= TABS ================= */

@@ -261,9 +261,11 @@ create table if not exists public.notify_config (
   telegram_token text default '',
   telegram_chat  text default '',
   sheet_webhook  text default '',
+  admin_url      text default 'https://auracases.github.io/Aura/admin.html',
   constraint notify_singleton check (id = 1)
 );
 insert into public.notify_config (id) values (1) on conflict (id) do nothing;
+alter table public.notify_config add column if not exists admin_url text default 'https://auracases.github.io/Aura/admin.html';
 alter table public.notify_config enable row level security;
 drop policy if exists "admin notify_config" on public.notify_config;
 create policy "admin notify_config" on public.notify_config for all to authenticated using (true) with check (true);
@@ -285,7 +287,8 @@ begin
     into items_txt from jsonb_array_elements(coalesce(NEW.items,'[]'::jsonb)) i;
   msg := '🛒 New order ' || NEW.order_id || E'\n👤 ' || coalesce(NEW.name,'') || ' · ' || coalesce(NEW.mobile,'')
        || E'\n' || coalesce(items_txt,'') || E'\n💵 ৳' || NEW.total || ' · ' || coalesce(NEW.payment_method,'')
-       || E'\n📍 ' || coalesce(NEW.area,'') || ' — ' || coalesce(NEW.address,'');
+       || E'\n📍 ' || coalesce(NEW.area,'') || ' — ' || coalesce(NEW.address,'')
+       || case when coalesce(nc.admin_url,'') <> '' then E'\n🔗 ' || nc.admin_url || '?order=' || NEW.order_id else '' end;
   if coalesce(s.telegram_token,'') <> '' and coalesce(s.telegram_chat,'') <> '' then
     begin perform net.http_post(
       url := 'https://api.telegram.org/bot' || s.telegram_token || '/sendMessage',
