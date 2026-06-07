@@ -300,7 +300,7 @@
       <div class="muted" style="font-size:.82rem;margin-bottom:10px">Shown on the public demos page, grouped by case type. Videos: keep them short (a few MB) — free Storage is 1&nbsp;GB.</div>
       <div class="wrap-row" style="align-items:flex-end">
         <div style="flex:1 1 150px"><label>Case type</label>
-          <select id="dmCase"><option value="tpu">TPU Soft</option><option value="uv">UV Printed</option><option value="d2">2D Hard Case</option><option value="d3">3D Hard Case</option><option value="custom">Custom / Your Photo</option></select>
+          <select id="dmCase"><option value="tpu">TPU Soft</option><option value="uv">UV Printed</option><option value="d2">2D Hard Case</option><option value="d3">3D Hard Case</option></select>
         </div>
         <div style="flex:1 1 180px"><label>Upload file (image/video)</label><input type="file" id="dmFile" accept="image/*,video/*" /></div>
         <div style="flex:1 1 100%"><label>…or paste a direct media URL</label><input id="dmUrl" placeholder="https://…/clip.mp4 or image.jpg" /></div>
@@ -1011,7 +1011,7 @@ async function loadDemos(){
   data.forEach(d => {
     const card = document.createElement("div"); card.className = "d-card";
     const thumb = d.media_type === "video"
-      ? `<video src="${esc(d.url)}" muted playsinline preload="metadata" controls style="width:100%;height:130px;object-fit:cover;background:#000"></video>`
+      ? `<video src="${esc(d.url)}#t=0.1" muted playsinline preload="metadata" controls style="width:100%;height:130px;object-fit:cover;background:#000"></video>`
       : `<div class="d-thumb" style="background-image:url('${esc(d.url)}')"></div>`;
     card.innerHTML = `
       ${thumb}

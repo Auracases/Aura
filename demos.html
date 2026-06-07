@@ -107,7 +107,6 @@ let TYPES = [
   { key:"d2",  name:"2D Hard Case", descr:"Hard back, flat print" },
   { key:"d3",  name:"3D Hard Case", descr:"Print wraps the edges" },
 ];
-const CUSTOM = { key:"custom", name:"Custom / Your Photo", descr:"Your own photo or a chosen design", price:null };
 let DEMOS = [];
 let activeKey = null;
 
@@ -125,7 +124,7 @@ async function load(){
   renderPills();
 }
 
-function allTypes(){ return [...TYPES, CUSTOM]; }
+function allTypes(){ return TYPES; }
 
 function renderPills(){
   const box = $("pills"); box.innerHTML = "";
@@ -161,7 +160,7 @@ function renderGallery(){
     if(d.media_type === "video"){
       cell.innerHTML = `
         <span class="vtag">▶ VIDEO</span>
-        <video src="${esc(d.url)}" controls playsinline preload="metadata"></video>
+        <video src="${esc(d.url)}#t=0.1" controls playsinline preload="metadata"></video>
         <button class="expand" title="Fullscreen">⛶</button>
         ${d.caption ? `<div class="cap">${esc(d.caption)}</div>` : ""}`;
       cell.querySelector(".expand").onclick = (e) => { e.stopPropagation(); openLightbox(d.url, "video"); };
