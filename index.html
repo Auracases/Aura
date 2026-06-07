@@ -176,6 +176,21 @@
   .t-no{background:var(--red-bg);color:#B33A1B;}
   .unavail-note{display:none;font-size:.8rem;background:#FFF6E6;border:1.5px dashed #D9A53C;border-radius:11px;padding:10px 12px;margin-top:12px;color:#7A5A14;line-height:1.45;}
   .unavail-note.show{display:block;}
+  .see-demos{display:inline-block;margin-top:8px;font-size:.74rem;font-weight:700;color:var(--accent-dark);
+    background:#FFF1EC;border:1.5px solid var(--accent);border-radius:8px;padding:4px 9px;cursor:pointer;}
+
+  /* demo modal (case-step gallery) */
+  .demo-modal{position:fixed;inset:0;background:rgba(20,16,30,.6);display:none;align-items:flex-start;justify-content:center;
+    z-index:150;padding:18px 12px;overflow-y:auto;}
+  .demo-modal.show{display:flex;}
+  .demo-modal .dm-sheet{background:var(--bg);border:2px solid var(--ink);border-radius:var(--radius);box-shadow:var(--shadow);
+    max-width:620px;width:100%;margin:auto;padding:16px;}
+  .demo-modal .dm-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .demo-modal .dm-head h3{font-family:var(--font-display);font-weight:800;font-size:1.1rem;}
+  .demo-modal .dm-x{background:var(--ink);color:#fff;border:none;border-radius:9px;padding:6px 12px;font-weight:700;cursor:pointer;}
+  .demo-modal .dm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;}
+  .demo-modal .dm-cell{border:2px solid var(--ink);border-radius:12px;overflow:hidden;aspect-ratio:3/4;background:#EFE9DC;}
+  .demo-modal .dm-cell img,.demo-modal .dm-cell video{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in;}
 
   /* ---------- designs ---------- */
   .design-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;}
@@ -348,6 +363,14 @@
 
   <!-- fullscreen image preview -->
   <div id="lightbox" class="lightbox"><img id="lightboxImg" alt="design preview" /></div>
+
+  <!-- case-step demo gallery -->
+  <div id="demoModal" class="demo-modal">
+    <div class="dm-sheet">
+      <div class="dm-head"><h3 id="dmTitle">Demos</h3><button class="dm-x" id="dmClose">✕ Close</button></div>
+      <div class="dm-grid" id="dmGrid"></div>
+    </div>
+  </div>
 
   <!-- ============ STEP 1 : PHONE MODEL ============ -->
   <section class="step active" id="step1">
@@ -774,6 +797,14 @@ function renderCases(){
         refreshSummary();
       };
     }
+    const demos = demosForCase(c);
+    if(demos.length){
+      const dl = document.createElement("span");
+      dl.className = "see-demos";
+      dl.textContent = `📺 See ${demos.length} demo${demos.length>1?"s":""}`;
+      dl.onclick = (e) => { e.stopPropagation(); openDemoModal(c); };
+      card.appendChild(dl);
+    }
     grid.appendChild(card);
   }
 
@@ -856,10 +887,46 @@ async function shareDesign(){
 $("dbShare").onclick = shareDesign;
 $("dbChange").onclick = () => { $("step3").classList.add("active"); $("step3").scrollIntoView({behavior:"smooth", block:"start"}); };
 
-/* tap the design thumbnail → fullscreen preview */
-function openLightbox(src){ if(!src) return; $("lightboxImg").src = src; $("lightbox").classList.add("show"); }
-$("dbThumb").onclick = () => { if(state.design && state.design.image_url) openLightbox(state.design.image_url); };
-$("lightbox").onclick = () => $("lightbox").classList.remove("show");
+/* fullscreen preview (image or video) */
+function openLightbox(src, type){
+  if(!src) return;
+  $("lightbox").innerHTML = (type === "video")
+    ? `<video src="${src}" controls playsinline autoplay style="max-width:100%;max-height:90vh;border-radius:14px;border:2px solid #fff;background:#000"></video>`
+    : `<img src="${src}" alt="preview" style="max-width:100%;max-height:90vh;border-radius:14px;border:2px solid #fff" />`;
+  $("lightbox").classList.add("show");
+}
+$("dbThumb").onclick = () => { if(state.design && state.design.image_url) openLightbox(state.design.image_url, "image"); };
+$("lightbox").onclick = () => { $("lightbox").classList.remove("show"); $("lightbox").innerHTML = ""; };
+
+/* ---------- case-step demos ---------- */
+let DEMO_CATS = [], DEMOS_ALL = [];
+async function loadDemoData(){
+  if(!sb) return;
+  try{
+    const [cats, dem] = await Promise.all([
+      sb.from("demo_categories").select("*").eq("active", true),
+      sb.from("demos").select("*").eq("active", true).order("sort")
+    ]);
+    DEMO_CATS = cats.data || []; DEMOS_ALL = dem.data || [];
+  }catch(_){}
+}
+function demosForCase(c){
+  const cat = DEMO_CATS.find(x => norm(x.name) === norm(c.name));
+  return cat ? DEMOS_ALL.filter(d => d.category_id === cat.id) : [];
+}
+function openDemoModal(c){
+  const items = demosForCase(c);
+  $("dmTitle").textContent = c.name + " — demos";
+  const grid = $("dmGrid");
+  grid.innerHTML = items.map(d => d.media_type === "video"
+    ? `<div class="dm-cell"><video src="${escapeHtml(d.url)}#t=0.1" controls playsinline preload="metadata" data-full="${escapeHtml(d.url)}" data-type="video"></video></div>`
+    : `<div class="dm-cell"><img loading="lazy" src="${escapeHtml(d.url)}" data-full="${escapeHtml(d.url)}" data-type="image" /></div>`
+  ).join("") || `<div style="padding:20px;color:var(--ink-soft)">No demos yet.</div>`;
+  grid.querySelectorAll("[data-full]").forEach(el => el.onclick = () => openLightbox(el.dataset.full, el.dataset.type));
+  $("demoModal").classList.add("show");
+}
+$("dmClose").onclick = () => $("demoModal").classList.remove("show");
+$("demoModal").onclick = (e) => { if(e.target.id === "demoModal") $("demoModal").classList.remove("show"); };
 
 // Apply ?design=<id> from an ad link: preset the design, pin the banner, focus step 1.
 function applyDesignParam(){
@@ -1306,7 +1373,7 @@ $("confDone").onclick = () => {
 showView("cart");
 renderDesigns();   // renders empty/fallback immediately
 (async () => {
-  await Promise.all([loadPhones(), loadCaseTypes(), loadDesigns(), loadSettings()]);
+  await Promise.all([loadPhones(), loadCaseTypes(), loadDesigns(), loadSettings(), loadDemoData()]);
   renderDesigns();                       // swap in live designs
   renderSaleBanner();                    // show store-wide sale up top, if active
   applyDesignParam();                    // ad deep-link: ?design=<id> presets + pins the design
