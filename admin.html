@@ -384,6 +384,7 @@ async function loadDesigns(){
         <div class="saved"></div>
         <div class="d-actions">
           <button class="ghost b-save">Save</button>
+          <button class="ghost b-link">Copy ad link</button>
           <button class="ghost b-toggle">${d.active?"Hide":"Show"}</button>
           <button class="danger b-del">Remove</button>
         </div>
@@ -398,6 +399,14 @@ async function loadDesigns(){
       }).eq("id", d.id);
       saved.textContent = error ? "Failed" : "Saved ✓"; e.target.disabled = false;
       setTimeout(()=>saved.textContent="",1500);
+    };
+    card.querySelector(".b-link").onclick = (e) => {
+      // storefront ad link for this design (same origin/folder as admin.html)
+      const url = location.href.split("admin.html")[0] + "index.html?design=" + d.id;
+      const btn = e.target;
+      const ok = () => { btn.textContent = "Copied ✓"; setTimeout(()=>btn.textContent="Copy ad link", 1500); };
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok).catch(()=>prompt("Copy this link:", url));
+      else prompt("Copy this link:", url);
     };
     card.querySelector(".b-toggle").onclick = async () => {
       await sb.from("designs").update({ active: !d.active }).eq("id", d.id); loadDesigns();

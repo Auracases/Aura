@@ -72,6 +72,21 @@
   }
   .sale-banner.show{display:block;}
 
+  /* ---------- preset design banner (from an ad link or after picking) ---------- */
+  .design-banner{
+    display:none;align-items:center;gap:12px;margin-top:14px;
+    background:var(--card);border:2px solid var(--ink);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:10px 12px;
+  }
+  .design-banner.show{display:flex;}
+  .design-banner .db-thumb{width:48px;height:48px;border-radius:10px;border:1.5px solid var(--ink);
+    background-size:cover;background-position:center;flex-shrink:0;}
+  .design-banner .db-info{flex:1;min-width:0;}
+  .design-banner .db-lab{font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-dark);}
+  .design-banner .db-name{font-weight:700;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .design-banner .db-change{background:none;border:none;color:var(--ink-soft);font-size:.74rem;font-weight:600;text-decoration:underline;cursor:pointer;padding:2px 0;font-family:var(--font-body);}
+  .design-banner .db-share{background:var(--ink);color:#fff;border:none;border-radius:10px;padding:9px 12px;font-weight:700;font-size:.8rem;cursor:pointer;font-family:var(--font-body);flex-shrink:0;}
+
   /* ---------- hero ---------- */
   .hero{padding:26px 0 8px;}
   .hero h1{
@@ -308,6 +323,17 @@
 
   <!-- store-wide sale banner (shown when an active store discount is set in admin) -->
   <div id="saleBanner" class="sale-banner"></div>
+
+  <!-- preset/selected design banner (from an ad link, or after picking a design) -->
+  <div id="designBanner" class="design-banner">
+    <div class="db-thumb" id="dbThumb"></div>
+    <div class="db-info">
+      <div class="db-lab">Your design</div>
+      <div class="db-name" id="dbName"></div>
+      <button class="db-change" id="dbChange">change design</button>
+    </div>
+    <button class="db-share" id="dbShare">📤 Share</button>
+  </div>
 
   <!-- ============ STEP 1 : PHONE MODEL ============ -->
   <section class="step active" id="step1">
@@ -755,7 +781,9 @@ function renderDesigns(){
   for(const d of DESIGNS){
     const tile = document.createElement("div");
     tile.className = "design";
+    tile.dataset.id = d.id;
     tile.title = d.context || "";
+    if(state.design && state.design.kind === "preset" && String(state.design.id) === String(d.id)) tile.classList.add("selected");
     tile.innerHTML = `<div class="art" style="background-image:url('${d.image_url}');background-size:cover;background-position:center"></div>
                       <div class="d-name">${escapeHtml(d.name)}</div>`;
     tile.onclick = () => {
@@ -763,6 +791,7 @@ function renderDesigns(){
       document.querySelectorAll(".design").forEach(el=>el.classList.remove("selected"));
       tile.classList.add("selected");
       $("uploadWarn").classList.remove("show");
+      renderDesignBanner();
       updatePreview(); refreshSummary();
     };
     grid.appendChild(tile);
@@ -773,6 +802,58 @@ function renderDesigns(){
   up.innerHTML = `<div class="art">📷<span class="up-label">Upload your<br>own photo</span></div>`;
   up.onclick = () => $("fileInput").click();
   grid.appendChild(up);
+}
+
+/* ---------- preset design banner + share (ad deep-link feature) ---------- */
+function renderDesignBanner(){
+  const b = $("designBanner"), d = state.design;
+  if(d && d.kind === "preset" && d.id != null){
+    $("dbThumb").style.backgroundImage = `url('${d.image_url}')`;
+    $("dbName").textContent = d.name || "Selected design";
+    b.classList.add("show");
+  } else {
+    b.classList.remove("show");
+  }
+}
+function designLink(id){ return location.origin + location.pathname + "?design=" + id; }
+function copyText(text){
+  const done = () => showToast("Link copied ✓");
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text, done));
+  } else fallbackCopy(text, done);
+}
+function fallbackCopy(text, done){
+  try{
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); done();
+  }catch(_){ prompt("Copy this link:", text); }
+}
+async function shareDesign(){
+  const d = state.design;
+  if(!d || d.kind !== "preset" || d.id == null) return;
+  const url = designLink(d.id);
+  if(navigator.share){
+    try{ await navigator.share({ title: d.name || "CaseBari design", text: "Check out this phone case design", url }); return; }
+    catch(_){ /* user cancelled or unsupported → fall through to copy */ }
+  }
+  copyText(url);
+}
+$("dbShare").onclick = shareDesign;
+$("dbChange").onclick = () => { $("step3").classList.add("active"); $("step3").scrollIntoView({behavior:"smooth", block:"start"}); };
+
+// Apply ?design=<id> from an ad link: preset the design, pin the banner, focus step 1.
+function applyDesignParam(){
+  const id = new URLSearchParams(location.search).get("design");
+  if(!id) return;
+  const d = DESIGNS.find(x => String(x.id) === String(id));
+  if(!d) return;                          // invalid / inactive / deleted → normal flow
+  state.design = { kind:"preset", ...d };
+  $("step3").classList.add("active");      // let them change it if they want
+  renderDesigns();                         // re-render so the tile shows selected
+  renderDesignBanner();
+  refreshSummary();
+  setTimeout(()=>$("step1").scrollIntoView({behavior:"smooth", block:"start"}), 120);
 }
 
 $("fileInput").addEventListener("change", e => {
@@ -794,6 +875,7 @@ $("fileInput").addEventListener("change", e => {
       state.design = {kind:"upload", name:"Your photo", url, w:img.naturalWidth, h:img.naturalHeight};
       document.querySelectorAll(".design").forEach(el=>el.classList.remove("selected"));
       document.querySelector(".upload-tile").classList.add("selected");
+      renderDesignBanner();   // hide the catalog-design banner (uploads have no share link)
       updatePreview(); refreshSummary();
     };
     img.src = url;
@@ -1208,6 +1290,7 @@ renderDesigns();   // renders empty/fallback immediately
   await Promise.all([loadPhones(), loadCaseTypes(), loadDesigns(), loadSettings()]);
   renderDesigns();                       // swap in live designs
   renderSaleBanner();                    // show store-wide sale up top, if active
+  applyDesignParam();                    // ad deep-link: ?design=<id> presets + pins the design
   if(state.model) renderCases();         // refresh cases if a model is already picked
 })();
 
