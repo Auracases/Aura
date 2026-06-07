@@ -1106,7 +1106,9 @@ async function submitOrder(data){
         const jpeg = await compressImage(it.designUrl, 1600, 0.85);
         const blob = await dataUrlToBlob(jpeg);
         const path = `${orderId}/item${i+1}.jpg`;
-        const { error: upErr } = await sb.storage.from("order-photos").upload(path, blob, { contentType:"image/jpeg", upsert:true });
+        // upsert:false — anon has INSERT (not UPDATE) on order-photos; paths are
+        // unique per order, so a plain insert is correct and passes RLS.
+        const { error: upErr } = await sb.storage.from("order-photos").upload(path, blob, { contentType:"image/jpeg", upsert:false });
         if(upErr) throw upErr;
         const { data: pub } = sb.storage.from("order-photos").getPublicUrl(path);
         photoUrls.push(pub.publicUrl);
@@ -1138,8 +1140,9 @@ async function submitOrder(data){
     // Keep everything the customer typed; let them retry.
     btn.classList.remove("loading");
     btn.disabled = false;
-    $("submitErr").textContent = "Couldn't place order — check your internet and try again.";
+    $("submitErr").textContent = "Couldn't place order — " + (err && (err.message || err.error_description || err.error || JSON.stringify(err)) || "unknown error");
     $("submitErr").style.display = "block";
+    try{ console.error("place order failed:", err); }catch(_){ }
   }
 }
 
