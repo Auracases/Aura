@@ -59,6 +59,8 @@
   .d-body textarea{margin-top:7px;min-height:42px;resize:vertical}
   .d-actions{display:flex;gap:8px;margin-top:9px}
   .bulk-bar{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:9px 12px;background:#f4f0ff;border-radius:10px;flex-wrap:wrap}
+  .bulk-bar input[type=checkbox]{width:22px!important;height:22px;cursor:pointer}
+  .d-pick,.o-pick{width:22px!important;height:22px;cursor:pointer;flex-shrink:0}
   .d-actions button{padding:6px 10px;font-size:.85rem;flex:1}
 
   /* orders */
@@ -95,6 +97,9 @@
   .modal .sheet{background:#fff;border-radius:16px;max-width:560px;width:100%;padding:20px;margin:auto}
   .modal .x{float:right;background:#f1eff5;color:var(--ink);border-radius:8px;padding:4px 10px}
   .li-item{border:1px solid var(--line);border-radius:10px;padding:9px;margin-bottom:9px;background:#faf9ff}
+  .adm-lb{position:fixed;inset:0;background:rgba(0,0,0,.86);display:none;align-items:center;justify-content:center;z-index:300;padding:18px;cursor:zoom-out}
+  .adm-lb.show{display:flex}
+  .adm-lb img,.adm-lb video{max-width:100%;max-height:90vh;border-radius:12px;border:2px solid #fff;box-shadow:0 8px 40px rgba(0,0,0,.5);background:#000}
   .li-row{display:flex;gap:8px;align-items:center}
   .li-row input,.li-row select{padding:7px 9px}
   .li-search{position:relative;margin-bottom:7px}
@@ -189,8 +194,10 @@
       </div>
     </div>
     <div class="row" style="margin-bottom:12px">
-      <input id="orderSearch" placeholder="Search name / mobile / order ID…" class="grow" />
+      <input id="orderSearch" placeholder="Search name / mobile / order ID / tag…" class="grow" />
     </div>
+    <div class="bulk-bar"><label class="row" style="gap:6px;margin:0"><input type="checkbox" id="oSelAll" /> Select visible</label>
+      <span class="grow"></span><button class="danger" id="oDelSel">Delete selected</button></div>
     <div id="ordersList"><div class="loading">Loading…</div></div>
     <div class="row" style="justify-content:center;margin-top:6px">
       <button class="ghost" id="loadMoreOrders" style="display:none">Load more</button>
@@ -199,6 +206,9 @@
 
   <!-- order detail modal -->
   <div id="orderModal" class="modal hidden"><div class="sheet" id="orderModalBody"></div></div>
+
+  <!-- full-image/video preview (designs, demos, order photos) -->
+  <div id="admLb" class="adm-lb"></div>
 
   <!-- manual order modal -->
   <div id="manualModal" class="modal hidden"><div class="sheet">
@@ -374,6 +384,14 @@ function compressImage(dataUrl, maxPx = 1400, quality = 0.85){
 const fileToDataUrl = f => new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(f); });
 const dataUrlToBlob = async u => (await fetch(u)).blob();
 
+/* full preview overlay for designs/demos/photos */
+function admLB(src, type){
+  const lb = $("admLb");
+  lb.innerHTML = (type === "video") ? `<video src="${src}" controls playsinline autoplay></video>` : `<img src="${src}" alt="preview" />`;
+  lb.classList.add("show");
+}
+$("admLb").onclick = () => { $("admLb").classList.remove("show"); $("admLb").innerHTML = ""; };
+
 /* ================= AUTH ================= */
 async function boot(){
   if(!sb){ $("gateErr").textContent = "Supabase not configured in config.js."; return; }
@@ -486,6 +504,7 @@ async function loadDesigns(){
           <button class="danger b-del">Remove</button>
         </div>
       </div>`;
+    const th0 = card.querySelector(".d-thumb"); if(th0){ th0.style.cursor = "zoom-in"; th0.onclick = () => admLB(d.image_url, "image"); }
     const saved = card.querySelector(".saved");
     card.querySelector(".b-save").onclick = async (e) => {
       e.target.disabled = true;
@@ -657,12 +676,21 @@ $("refreshOrders").onclick = () => loadOrders(true);
 $("loadMoreOrders").onclick = () => loadOrders(false);
 let ordSearchTimer;
 $("orderSearch").addEventListener("input", () => { clearTimeout(ordSearchTimer); ordSearchTimer = setTimeout(()=>loadOrders(true), 300); });
+$("oSelAll").onclick = (e) => document.querySelectorAll("#ordersList .o-pick").forEach(c => c.checked = e.target.checked);
+$("oDelSel").onclick = async () => {
+  const ids = [...document.querySelectorAll("#ordersList .o-pick")].filter(c => c.checked).map(c => Number(c.dataset.oid));
+  if(!ids.length){ alert("Tick the orders you want to delete first."); return; }
+  if(!confirm(`Delete ${ids.length} order(s)? This can't be undone.`)) return;
+  const { error } = await sb.from("orders").delete().in("id", ids);
+  if(error){ alert("Delete failed: " + error.message); return; }
+  $("oSelAll").checked = false; loadOrders(true);
+};
 
 async function loadOrders(reset){
   const box = $("ordersList");
   if(reset){ ORD.offset = 0; ORD.done = false; ORD.q = $("orderSearch").value.trim(); box.innerHTML = `<div class="loading">Loading…</div>`; }
   let query = sb.from("orders").select("*").order("created_at",{ascending:false}).range(ORD.offset, ORD.offset + ORD.PAGE - 1);
-  if(ORD.q){ const like = `%${ORD.q}%`; query = query.or(`name.ilike.${like},mobile.ilike.${like},order_id.ilike.${like}`); }
+  if(ORD.q){ const like = `%${ORD.q}%`; query = query.or(`name.ilike.${like},mobile.ilike.${like},order_id.ilike.${like},tags.ilike.${like}`); }
   const { data, error } = await query;
   if(error){ box.innerHTML = `<div class="loading">Couldn't load.</div>`; return; }
   if(reset) box.innerHTML = "";
@@ -677,15 +705,18 @@ async function loadOrders(reset){
 function orderCard(o){
   const card = document.createElement("div");
   card.className = "o-card";
+  const tagChips = (o.tags||"").split(",").map(t=>t.trim()).filter(Boolean);
   card.innerHTML = `
     <div class="o-head">
-      <div><span class="o-id">${esc(o.order_id)}</span> <span class="muted">· ${esc(new Date(o.created_at).toLocaleString())}</span></div>
+      <label class="row" style="gap:7px;margin:0"><input type="checkbox" class="o-pick" data-oid="${o.id}" /><span class="o-id">${esc(o.order_id)}</span></label>
       <span class="pill ${o.status==="Cancelled"?"p-off":"p-on"}">${esc(o.status||"New")}</span>
     </div>
-    <div class="o-meta">${esc(o.name||"")} · ${esc(o.mobile||"")} · ${esc(o.area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka")}</div>
+    <div class="o-meta">${esc(o.name||"")} · ${esc(o.mobile||"")} · ${esc(o.area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka")} · ${esc(new Date(o.created_at).toLocaleString())}</div>
     <div class="o-head"><div class="muted" style="font-size:.82rem">${(o.items||[]).length} item(s) · tap to open</div><div><b>${taka(o.total)}</b> · ${esc(o.payment_method||"")}</div></div>
     ${(() => { const imgs = orderImages(o); return imgs.length ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${imgs.slice(0,6).map(u=>`<div style="width:46px;height:60px;border-radius:8px;border:1px solid var(--line);background:#eee url('${esc(u)}') center/cover"></div>`).join("")}</div>` : ""; })()}
+    ${tagChips.length?`<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${tagChips.map(t=>`<span class="pill" style="background:#e6f0ff;color:#1b4fa0">${esc(t)}</span>`).join("")}</div>`:""}
     ${o.note?`<div class="o-note"><b>📝 Note:</b> ${esc(o.note)}</div>`:""}`;
+  card.querySelector(".o-pick").onclick = (e) => e.stopPropagation();
   card.onclick = () => openOrder(o);
   return card;
 }
@@ -706,7 +737,8 @@ function openOrder(o){
     <div class="o-items">${esc(orderItemsText(o))||"(no items)"}</div>
     <div style="margin:10px 0;display:flex;gap:8px;flex-wrap:wrap">${imgs.length?imgs.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener" title="Open full image"><div style="width:74px;height:96px;border-radius:9px;border:1.5px solid var(--line);background:#eee url('${esc(u)}') center/cover"></div></a>`).join(""):'<span class="muted" style="font-size:.82rem">no design images</span>'}</div>
     <div class="o-meta">Subtotal ${taka(o.subtotal)} · Delivery ${taka(o.delivery)}${o.discount?` · −${taka(o.discount)}${o.promo_code?` (${esc(o.promo_code)})`:""}`:""} · <b>Total ${taka(o.total)}</b> · ${esc(o.payment_method||"")}</div>
-    <div class="field" style="margin-top:12px"><label>Admin note (only you see this)</label><textarea id="omNote" style="min-height:60px">${esc(o.note||"")}</textarea></div>
+    <div class="field" style="margin-top:12px"><label>Tags (comma-separated, e.g. urgent, reprint)</label><input id="omTags" value="${esc(o.tags||"")}" /></div>
+    <div class="field"><label>Admin note (only you see this)</label><textarea id="omNote" style="min-height:60px">${esc(o.note||"")}</textarea></div>
     <div class="row" style="justify-content:space-between;margin-top:6px">
       <button class="danger" id="omDelete">Delete</button>
       <button id="omSave">Save</button>
@@ -716,7 +748,7 @@ function openOrder(o){
   $("omClose").onclick = closeOrderModal;
   $("omSave").onclick = async () => {
     const msg = $("omMsg"); msg.style.color = "var(--muted)"; msg.textContent = "Saving…";
-    const { error } = await sb.from("orders").update({ status: $("omStatus").value, note: $("omNote").value.trim() }).eq("id", o.id);
+    const { error } = await sb.from("orders").update({ status: $("omStatus").value, note: $("omNote").value.trim(), tags: $("omTags").value.trim() }).eq("id", o.id);
     if(error){ msg.style.color = "var(--bad)"; msg.textContent = error.message; return; }
     msg.style.color = "var(--ok)"; msg.textContent = "Saved ✓";
     setTimeout(()=>{ closeOrderModal(); loadOrders(true); }, 450);
@@ -1262,6 +1294,7 @@ async function renderDemoItems(){
           <button class="danger b-del">Remove</button>
         </div>
       </div>`;
+    const th0 = card.querySelector(".d-thumb"); if(th0){ th0.style.cursor = "zoom-in"; th0.onclick = () => admLB(d.url, "image"); }
     const saved = card.querySelector(".saved");
     card.querySelector(".b-save").onclick = async (e) => {
       e.target.disabled = true;
