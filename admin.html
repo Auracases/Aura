@@ -22,6 +22,7 @@
          background:var(--brand);color:#fff;font-weight:700}
   button:hover{background:var(--brand-d)}
   button.ghost{background:#efeaff;color:var(--brand-d)}
+  button.ghost.active{background:var(--brand);color:#fff}
   button.danger{background:#fdecea;color:var(--bad)}
   button:disabled{opacity:.5;cursor:default}
   input,textarea,select{font:inherit;width:100%;padding:9px 11px;border:1.5px solid var(--line);
@@ -210,10 +211,14 @@
         <label class="row" style="margin:0 0 9px;gap:6px"><input type="checkbox" id="ph3d" style="width:auto" /> 3D</label>
         <button id="addPhone" style="margin-bottom:0">Add</button>
       </div>
-      <div class="row" style="margin-top:12px"><input id="phSearch" placeholder="Search models…" /></div>
       <div id="phMsg" class="err" style="margin-top:6px"></div>
+      <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
+        <button id="ptab-sheet" class="ghost" style="padding:5px 12px">On the sheet</button>
+        <button id="ptab-all" class="ghost" style="padding:5px 12px">All models (GSM)</button>
+        <input id="phSearch" placeholder="Filter the list…" style="flex:1 1 160px" />
+      </div>
     </div>
-    <div id="phonesList"><div class="loading">Search above to list models.</div></div>
+    <div id="phonesList"><div class="loading">Loading…</div></div>
   </section>
 </div>
 
@@ -277,7 +282,8 @@ function showApp(){
 
 /* ================= TABS ================= */
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
-const LOADERS = { designs:loadDesigns, orders:loadOrders, promos:loadPromos, settings:loadSettings, phones:loadSync };
+const LOADERS = { designs:loadDesigns, orders:loadOrders, promos:loadPromos, settings:loadSettings, phones:loadPhonesTab };
+function loadPhonesTab(){ loadSync(); showPhoneSub("sheet"); }
 function switchTab(tab){
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
   ["designs","orders","promos","settings","phones"].forEach(t => $("tab-"+t).classList.toggle("hidden", t !== tab));
@@ -351,16 +357,20 @@ $("addDesignBtn").onclick = async () => {
     const blob = await dataUrlToBlob(jpeg);
     const path = `${Date.now()}-${norm(name).slice(0,40) || "design"}.jpg`;
     const { error: upErr } = await sb.storage.from("designs").upload(path, blob, { contentType:"image/jpeg", upsert:true });
-    if(upErr) throw upErr;
+    if(upErr) throw new Error("storage upload: " + (upErr.message || upErr));
     const { data: pub } = sb.storage.from("designs").getPublicUrl(path);
     const { error } = await sb.from("designs").insert({
       name, context: $("adContext").value.trim(), image_url: pub.publicUrl, active: $("adActive").checked, sort: 0
     });
-    if(error) throw error;
+    if(error) throw new Error("db insert: " + (error.message || error));
     $("adName").value = ""; $("adContext").value = ""; $("adFile").value = ""; $("adActive").checked = true;
     msg.style.color = ""; msg.textContent = "Added ✓";
     loadDesigns();
-  }catch(err){ msg.style.color = "var(--bad)"; msg.textContent = "Couldn't add — " + (err.message || "error"); }
+  }catch(err){
+    const { data: sess } = await sb.auth.getSession();
+    msg.style.color = "var(--bad)";
+    msg.textContent = "Couldn't add — " + (err.message || "error") + (sess && sess.session ? "  [session: logged in]" : "  [session: NOT logged in]");
+  }
   $("addDesignBtn").disabled = false;
 };
 
@@ -601,21 +611,62 @@ $("addPhone").onclick = async () => {
   if(error){ m.textContent = error.message; return; }
   $("phBrand").value = ""; $("phModel").value = ""; $("ph2d").checked = false; $("ph3d").checked = false;
   m.style.color = ""; m.textContent = "Added ✓";
-  if($("phSearch").value.trim()) runPhoneSearch();
+  PH.sheet = null; PH.all = null; showPhoneSub(PH.tab);   // refresh lists with the new model
 };
 
-let phTimer;
-$("phSearch").addEventListener("input", () => { clearTimeout(phTimer); phTimer = setTimeout(runPhoneSearch, 250); });
-async function runPhoneSearch(){
-  const q = $("phSearch").value.trim();
-  const box = $("phonesList");
-  if(!q){ box.innerHTML = `<div class="loading">Search above to list models.</div>`; return; }
-  const { data, error } = await sb.from("phones").select("*").ilike("model_name", `%${q}%`).order("model_name").limit(50);
-  if(error){ box.innerHTML = `<div class="loading">Couldn't search.</div>`; return; }
-  if(!data.length){ box.innerHTML = `<div class="loading">No matches.</div>`; return; }
-  const tb = phoneTableShell(box);
-  data.forEach(p => renderPhoneRow(tb, p, runPhoneSearch));
+/* ---- phones sub-tabs: "sheet" (on_sheet, auto-loaded) vs "all" (GSM master) ---- */
+const PH = { tab:"sheet", sheet:null, all:null };
+
+async function fetchPhones(which){
+  if(which === "sheet"){
+    const { data } = await sb.from("phones").select("*").eq("on_sheet", true).order("model_name").limit(2000);
+    return data || [];
+  }
+  // all models — Supabase caps each response at 1000 rows, so page through.
+  let rows = [], CH = 1000;
+  for(let from = 0; ; from += CH){
+    const { data, error } = await sb.from("phones").select("*").order("model_name").range(from, from + CH - 1);
+    if(error) break;
+    rows = rows.concat(data || []);
+    if(!data || data.length < CH) break;
+  }
+  return rows;
 }
+
+async function showPhoneSub(which){
+  PH.tab = which;
+  $("ptab-sheet").classList.toggle("active", which === "sheet");
+  $("ptab-all").classList.toggle("active", which === "all");
+  if(PH[which] === null){
+    $("phonesList").innerHTML = `<div class="loading">Loading…</div>`;
+    PH[which] = await fetchPhones(which);
+  }
+  renderPhoneList();
+}
+
+function renderPhoneList(){
+  const box = $("phonesList");
+  const all = PH[PH.tab] || [];
+  const q = norm($("phSearch").value || "");
+  const list = q ? all.filter(p => norm(p.model_name).includes(q) || norm(p.brand).includes(q)) : all;
+  if(!list.length){ box.innerHTML = `<div class="loading">No models.</div>`; return; }
+  const CAP = 300, shown = list.slice(0, CAP);
+  const tb = phoneTableShell(box);
+  shown.forEach(p => renderPhoneRow(tb, p, reloadPhoneSub));
+  if(list.length > CAP){
+    const note = document.createElement("div");
+    note.className = "muted"; note.style.cssText = "padding:8px;font-size:.8rem";
+    note.textContent = `Showing ${CAP} of ${list.length} — type to filter.`;
+    box.appendChild(note);
+  }
+}
+
+async function reloadPhoneSub(){ PH[PH.tab] = await fetchPhones(PH.tab); renderPhoneList(); }
+
+let phTimer;
+$("phSearch").addEventListener("input", () => { clearTimeout(phTimer); phTimer = setTimeout(renderPhoneList, 200); });
+$("ptab-sheet").onclick = () => showPhoneSub("sheet");
+$("ptab-all").onclick = () => showPhoneSub("all");
 
 boot();
 </script>
