@@ -150,6 +150,14 @@
       </div>
       <div id="addMsg" class="muted" style="font-size:.82rem;margin-top:8px"></div>
     </div>
+
+    <div class="card">
+      <h3>Bulk upload designs</h3>
+      <div class="muted" style="font-size:.82rem;margin-bottom:8px">Pick many images at once — each becomes a design, named from its filename, set Active.</div>
+      <input type="file" id="bulkFiles" accept="image/*" multiple />
+      <div class="row" style="margin-top:12px;justify-content:flex-end"><button id="bulkUploadBtn">Upload all</button></div>
+      <div id="bulkMsg" class="muted" style="font-size:.82rem;margin-top:8px"></div>
+    </div>
     <div id="designsList"><div class="loading">Loading…</div></div>
   </section>
 
@@ -435,6 +443,36 @@ $("addDesignBtn").onclick = async () => {
     msg.textContent = "Couldn't add — " + (err.message || "error") + (sess && sess.session ? "  [session: logged in]" : "  [session: NOT logged in]");
   }
   $("addDesignBtn").disabled = false;
+};
+
+/* bulk upload: each file -> a design named from its filename, set Active */
+$("bulkUploadBtn").onclick = async () => {
+  const files = [...$("bulkFiles").files];
+  const msg = $("bulkMsg");
+  if(!files.length){ msg.style.color = "var(--bad)"; msg.textContent = "Pick one or more image files."; return; }
+  $("bulkUploadBtn").disabled = true;
+  let done = 0, failed = 0;
+  for(let i = 0; i < files.length; i++){
+    const file = files[i];
+    const name = (file.name.replace(/\.[^.]+$/,"").replace(/[_-]+/g," ").trim()) || `Design ${i+1}`;
+    msg.style.color = "var(--muted)"; msg.textContent = `Uploading ${i+1}/${files.length}: ${name}…`;
+    try{
+      const jpeg = await compressImage(await fileToDataUrl(file));
+      const blob = await dataUrlToBlob(jpeg);
+      const path = `${Date.now()}-${i}-${norm(name).slice(0,40) || "design"}.jpg`;
+      const { error: upErr } = await sb.storage.from("designs").upload(path, blob, { contentType:"image/jpeg", upsert:false });
+      if(upErr) throw upErr;
+      const { data: pub } = sb.storage.from("designs").getPublicUrl(path);
+      const { error } = await sb.from("designs").insert({ name, context:"", image_url: pub.publicUrl, active:true, sort:0 });
+      if(error) throw error;
+      done++;
+    }catch(_){ failed++; }
+  }
+  $("bulkFiles").value = "";
+  msg.style.color = failed ? "var(--bad)" : "var(--ok)";
+  msg.textContent = `Uploaded ${done}/${files.length}${failed?` · ${failed} failed`:""} ✓`;
+  $("bulkUploadBtn").disabled = false;
+  loadDesigns();
 };
 
 /* ================= ORDERS ================= */
