@@ -1095,11 +1095,17 @@ function renderPhoneRow(tb, p, reload){
   const ov  = p.manual_override
     ? `<span class="muted" style="font-size:.72rem">pinned</span> <button class="ghost b-rel" style="padding:2px 8px">Release</button>`
     : src;
+  // drift: a pinned (overridden) row whose live flags no longer match what the sheet reports
+  const drift = p.manual_override && p.on_sheet && (!!p.avail_2d !== !!p.sheet_2d || !!p.avail_3d !== !!p.sheet_3d);
+  const driftBadge = drift
+    ? `<div style="margin-top:4px"><span style="color:#C8502B;font-weight:700;font-size:.7rem">⚠ sheet now: 2D ${p.sheet_2d?"✓":"✕"} · 3D ${p.sheet_3d?"✓":"✕"}</span>
+        <button class="ghost b-adopt" style="padding:2px 8px;margin-left:4px">Adopt sheet</button></div>`
+    : "";
   tr.innerHTML = `
     <td>${esc(p.brand)}</td><td>${esc(p.model_name)}</td>
     <td><input type="checkbox" class="t2" ${p.avail_2d?"checked":""} style="width:auto" /></td>
     <td><input type="checkbox" class="t3" ${p.avail_3d?"checked":""} style="width:auto" /></td>
-    <td style="white-space:nowrap">${ov}</td>
+    <td style="white-space:nowrap">${ov}${driftBadge}</td>
     <td style="text-align:right"><button class="ghost b-save" style="padding:4px 10px">Save</button>
         <button class="danger b-del" style="padding:4px 10px">✕</button></td>`;
   tr.querySelector(".b-save").onclick = async (e) => {
@@ -1115,6 +1121,15 @@ function renderPhoneRow(tb, p, reload){
   const rel = tr.querySelector(".b-rel");
   if(rel) rel.onclick = async () => {
     await sb.from("phones").update({ manual_override:false, updated_at:new Date().toISOString() }).eq("id", p.id);
+    reload();
+  };
+  const adopt = tr.querySelector(".b-adopt");
+  if(adopt) adopt.onclick = async () => {
+    // take the sheet's current values and release the override so it tracks the sheet again
+    await sb.from("phones").update({
+      avail_2d: !!p.sheet_2d, avail_3d: !!p.sheet_3d,
+      manual_override:false, updated_at:new Date().toISOString()
+    }).eq("id", p.id);
     reload();
   };
   tr.querySelector(".b-del").onclick = async () => { if(confirm(`Delete ${p.model_name}?`)){ await sb.from("phones").delete().eq("id", p.id); reload(); } };

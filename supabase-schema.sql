@@ -253,6 +253,11 @@ alter table public.phones add column if not exists updated_at      timestamptz d
 -- on_sheet = this model appears in the availability sheet feed (set by the sheet
 -- sync). Lets admin show the small sheet list separately from the big GSM master.
 alter table public.phones add column if not exists on_sheet        boolean default false;
+-- sheet_2d/sheet_3d = what the availability sheet last reported, recorded on EVERY
+-- sync even for manually-overridden rows, so admin can spot when a pinned value has
+-- drifted from the sheet (the live avail_2d/3d only change when not manual_override).
+alter table public.phones add column if not exists sheet_2d        boolean default false;
+alter table public.phones add column if not exists sheet_3d        boolean default false;
 
 -- Admin-only note on an order (shown in the admin Orders tab; never to customers).
 alter table public.orders add column if not exists note text default '';
@@ -500,8 +505,10 @@ create or replace function public.sync_sheet_avail(p_rows jsonb)
 returns int language plpgsql security definer set search_path = public as $$
 declare n int;
 begin
-  insert into public.phones (brand, model_name, search_key, avail_2d, avail_3d, on_sheet, updated_at)
+  insert into public.phones (brand, model_name, search_key, avail_2d, avail_3d, sheet_2d, sheet_3d, on_sheet, updated_at)
   select coalesce(r->>'brand',''), r->>'model', public.norm(r->>'model'),
+         coalesce((r->>'avail_2d')::boolean,false),
+         coalesce((r->>'avail_3d')::boolean,false),
          coalesce((r->>'avail_2d')::boolean,false),
          coalesce((r->>'avail_3d')::boolean,false), true, now()
   from jsonb_array_elements(coalesce(p_rows,'[]'::jsonb)) as r
@@ -509,6 +516,8 @@ begin
   on conflict (search_key) do update
     set avail_2d   = case when phones.manual_override then phones.avail_2d else excluded.avail_2d end,
         avail_3d   = case when phones.manual_override then phones.avail_3d else excluded.avail_3d end,
+        sheet_2d   = excluded.sheet_2d,   -- always record what the sheet reported
+        sheet_3d   = excluded.sheet_3d,
         on_sheet   = true,
         brand      = case when phones.brand = '' then excluded.brand else phones.brand end,
         updated_at = now();
