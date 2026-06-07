@@ -699,9 +699,15 @@ modelInput.addEventListener("input", () => {
 
   const results = searchModels(q);
   for(const p of results){
+    const av = availFor(p.name);
     const btn = document.createElement("button");
     btn.className = "sug";
-    btn.innerHTML = `<span>${escapeHtml(p.name)}</span>`;   // clean: just the phone name
+    btn.innerHTML = `<span>${escapeHtml(p.name)}</span>
+      <span class="badges">
+        ${av.d2 ? '<span class="mini-badge mb-green">2D</span>' : ''}
+        ${av.d3 ? '<span class="mini-badge mb-green">3D</span>' : ''}
+        <span class="mini-badge mb-soft">TPU·UV</span>
+      </span>`;
     btn.onclick = () => selectModel({...p, known:true});
     sugBox.appendChild(btn);
   }
