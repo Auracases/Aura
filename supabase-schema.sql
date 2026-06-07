@@ -262,10 +262,18 @@ create table if not exists public.notify_config (
   telegram_chat  text default '',
   sheet_webhook  text default '',
   admin_url      text default 'https://auracases.github.io/Aura/admin.html',
+  capi_token     text default '',                                  -- Meta Conversions API access token (secret)
+  capi_pixel     text default '1003325708911348',                  -- Meta Pixel / dataset ID
+  store_url      text default 'https://auracases.github.io/Aura/',  -- event_source_url for CAPI
   constraint notify_singleton check (id = 1)
 );
 insert into public.notify_config (id) values (1) on conflict (id) do nothing;
 alter table public.notify_config add column if not exists admin_url text default 'https://auracases.github.io/Aura/admin.html';
+alter table public.notify_config add column if not exists capi_token text default '';
+alter table public.notify_config add column if not exists capi_pixel text default '1003325708911348';
+alter table public.notify_config add column if not exists store_url  text default 'https://auracases.github.io/Aura/';
+-- pgcrypto.digest() is used to SHA-256 the customer phone for CAPI user_data matching
+create extension if not exists pgcrypto with schema extensions;
 alter table public.notify_config enable row level security;
 drop policy if exists "admin notify_config" on public.notify_config;
 create policy "admin notify_config" on public.notify_config for all to authenticated using (true) with check (true);
@@ -279,7 +287,7 @@ alter table public.settings drop column if exists sheet_webhook;
 -- Requires: create extension if not exists pg_net;
 create or replace function public.notify_new_order() returns trigger
 language plpgsql security definer set search_path = public, extensions, net as $$
-declare s public.notify_config; items_txt text; msg text;
+declare s public.notify_config; items_txt text; msg text; ph text;
 begin
   select * into s from public.notify_config where id = 1;
   select string_agg('• ' || coalesce(i->>'caseType', i->>'name', 'item')
@@ -298,6 +306,33 @@ begin
   end if;
   if coalesce(s.sheet_webhook,'') <> '' then
     begin perform net.http_post(url := s.sheet_webhook, headers := '{"Content-Type":"application/json"}'::jsonb, body := to_jsonb(NEW));
+    exception when others then null; end;
+  end if;
+  -- Meta Conversions API (server-side Purchase). Bypasses browser/ad-block; de-dupes
+  -- with the browser pixel via event_id = order_id. Phone is SHA-256 hashed (E.164, no '+').
+  if coalesce(s.capi_token,'') <> '' and coalesce(s.capi_pixel,'') <> '' then
+    begin
+      ph := regexp_replace(coalesce(NEW.mobile,''), '\D', '', 'g');
+      if ph <> '' then
+        if left(ph,1) = '0' then ph := '880' || substring(ph from 2);
+        elsif left(ph,3) <> '880' then ph := '880' || ph;
+        end if;
+      end if;
+      perform net.http_post(
+        url := 'https://graph.facebook.com/v21.0/' || s.capi_pixel || '/events?access_token=' || s.capi_token,
+        headers := '{"Content-Type":"application/json"}'::jsonb,
+        body := jsonb_build_object('data', jsonb_build_array(jsonb_build_object(
+          'event_name', 'Purchase',
+          'event_time', extract(epoch from now())::bigint,
+          'action_source', 'website',
+          'event_id', NEW.order_id,
+          'event_source_url', coalesce(s.store_url, ''),
+          'user_data', jsonb_strip_nulls(jsonb_build_object(
+            'ph', case when ph <> '' then encode(digest(ph, 'sha256'), 'hex') else null end,
+            'external_id', encode(digest(NEW.order_id, 'sha256'), 'hex')
+          )),
+          'custom_data', jsonb_build_object('currency', 'BDT', 'value', NEW.total)
+        ))));
     exception when others then null; end;
   end if;
   return NEW;
