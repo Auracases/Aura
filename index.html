@@ -1356,28 +1356,28 @@ async function submitOrder(data){
   const orderId = makeOrderId();   // CB + yyMMddHHmmss, generated client-side
 
   try {
-    // 1) upload any custom photos to the order-photos bucket
+    // 1) build items WITH a per-item design image (so admin always sees what was
+    //    ordered — catalog image for presets, uploaded photo for custom uploads)
+    const items = [];
     const photoUrls = [];
     for(let i = 0; i < state.cart.length; i++){
       const it = state.cart[i];
+      let image = it.designImg || null;   // preset catalog image (public URL)
       if(it.designKind === "upload" && it.designUrl){
         const jpeg = await compressImage(it.designUrl, 1600, 0.85);
         const blob = await dataUrlToBlob(jpeg);
         const path = `${orderId}/item${i+1}.jpg`;
-        // upsert:false — anon has INSERT (not UPDATE) on order-photos; paths are
-        // unique per order, so a plain insert is correct and passes RLS.
+        // upsert:false — anon has INSERT (not UPDATE) on order-photos; paths are unique per order.
         const { error: upErr } = await sb.storage.from("order-photos").upload(path, blob, { contentType:"image/jpeg", upsert:false });
         if(upErr) throw upErr;
-        const { data: pub } = sb.storage.from("order-photos").getPublicUrl(path);
-        photoUrls.push(pub.publicUrl);
+        image = sb.storage.from("order-photos").getPublicUrl(path).data.publicUrl;
+        photoUrls.push(image);
       }
+      items.push({
+        caseTypeId: it.caseTypeId, caseType: it.caseType, model: it.model,
+        design: it.design, name: it.name, hasPhoto: it.designKind === "upload", image
+      });
     }
-
-    // 2) build the payload — the server recomputes prices/discounts
-    const items = state.cart.map(it => ({
-      caseTypeId: it.caseTypeId, caseType: it.caseType, model: it.model,
-      design: it.design, name: it.name, hasPhoto: it.designKind === "upload"
-    }));
 
     const payload = {
       order_id: orderId,

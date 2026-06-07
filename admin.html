@@ -614,6 +614,13 @@ function adminAvail(name){
 function orderItemsText(o){
   return (o.items||[]).map(it => `${it.caseType||it.caseTypeId||"item"} — ${it.model||""}${it.design?` · ${it.design}`:""}${it.name?` "${it.name}"`:""}${it.hasPhoto?" [photo]":""}`).join("\n");
 }
+// every design image in an order — per-item image (preset or upload) + legacy photo_urls
+function orderImages(o){
+  const out = [], seen = new Set();
+  (o.items||[]).forEach(it => { if(it.image && !seen.has(it.image)){ seen.add(it.image); out.push(it.image); } });
+  (o.photo_urls||[]).forEach(u => { if(u && !seen.has(u)){ seen.add(u); out.push(u); } });
+  return out;
+}
 
 $("refreshOrders").onclick = () => loadOrders(true);
 $("loadMoreOrders").onclick = () => loadOrders(false);
@@ -646,6 +653,7 @@ function orderCard(o){
     </div>
     <div class="o-meta">${esc(o.name||"")} · ${esc(o.mobile||"")} · ${esc(o.area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka")}</div>
     <div class="o-head"><div class="muted" style="font-size:.82rem">${(o.items||[]).length} item(s) · tap to open</div><div><b>${taka(o.total)}</b> · ${esc(o.payment_method||"")}</div></div>
+    ${(() => { const imgs = orderImages(o); return imgs.length ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${imgs.slice(0,6).map(u=>`<div style="width:46px;height:60px;border-radius:8px;border:1px solid var(--line);background:#eee url('${esc(u)}') center/cover"></div>`).join("")}</div>` : ""; })()}
     ${o.note?`<div class="o-note"><b>📝 Note:</b> ${esc(o.note)}</div>`:""}`;
   card.onclick = () => openOrder(o);
   return card;
@@ -656,7 +664,7 @@ function closeOrderModal(){ $("orderModal").classList.add("hidden"); }
 $("orderModal").onclick = (e) => { if(e.target.id==="orderModal") closeOrderModal(); };
 
 function openOrder(o){
-  const photos = o.photo_urls || [];
+  const imgs = orderImages(o);
   $("orderModalBody").innerHTML = `
     <button class="x" id="omClose">✕</button>
     <h3 style="margin-bottom:2px">${esc(o.order_id)}</h3>
@@ -665,7 +673,7 @@ function openOrder(o){
     <div class="o-meta"><b>${esc(o.name||"")}</b> · ${esc(o.mobile||"")}</div>
     <div class="o-meta">${esc(o.area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka")} — ${esc(o.address||"")}</div>
     <div class="o-items">${esc(orderItemsText(o))||"(no items)"}</div>
-    <div class="o-photos" style="margin:8px 0">${photos.length?photos.map((u,i)=>`<a href="${esc(u)}" target="_blank" rel="noopener">📎 photo ${i+1}</a>`).join(""):'<span class="muted" style="font-size:.82rem">no photos</span>'}</div>
+    <div style="margin:10px 0;display:flex;gap:8px;flex-wrap:wrap">${imgs.length?imgs.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener" title="Open full image"><div style="width:74px;height:96px;border-radius:9px;border:1.5px solid var(--line);background:#eee url('${esc(u)}') center/cover"></div></a>`).join(""):'<span class="muted" style="font-size:.82rem">no design images</span>'}</div>
     <div class="o-meta">Subtotal ${taka(o.subtotal)} · Delivery ${taka(o.delivery)}${o.discount?` · −${taka(o.discount)}${o.promo_code?` (${esc(o.promo_code)})`:""}`:""} · <b>Total ${taka(o.total)}</b> · ${esc(o.payment_method||"")}</div>
     <div class="field" style="margin-top:12px"><label>Admin note (only you see this)</label><textarea id="omNote" style="min-height:60px">${esc(o.note||"")}</textarea></div>
     <div class="row" style="justify-content:space-between;margin-top:6px">
