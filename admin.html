@@ -356,7 +356,7 @@ $("addDesignBtn").onclick = async () => {
     const jpeg = await compressImage(await fileToDataUrl(file));
     const blob = await dataUrlToBlob(jpeg);
     const path = `${Date.now()}-${norm(name).slice(0,40) || "design"}.jpg`;
-    const { error: upErr } = await sb.storage.from("designs").upload(path, blob, { contentType:"image/jpeg", upsert:true });
+    const { error: upErr } = await sb.storage.from("designs").upload(path, blob, { contentType:"image/jpeg", upsert:false });
     if(upErr) throw new Error("storage upload: " + (upErr.message || upErr));
     const { data: pub } = sb.storage.from("designs").getPublicUrl(path);
     const { error } = await sb.from("designs").insert({
