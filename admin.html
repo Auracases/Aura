@@ -93,8 +93,18 @@
   .modal.hidden{display:none}
   .modal .sheet{background:#fff;border-radius:16px;max-width:560px;width:100%;padding:20px;margin:auto}
   .modal .x{float:right;background:#f1eff5;color:var(--ink);border-radius:8px;padding:4px 10px}
-  .li-row{display:flex;gap:8px;margin-bottom:8px}
+  .li-item{border:1px solid var(--line);border-radius:10px;padding:9px;margin-bottom:9px;background:#faf9ff}
+  .li-row{display:flex;gap:8px;align-items:center}
   .li-row input,.li-row select{padding:7px 9px}
+  .li-search{position:relative;margin-bottom:7px}
+  .mi-sug{position:absolute;left:0;right:0;top:calc(100% + 2px);background:#fff;border:1px solid var(--line);
+          border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;z-index:5;display:none}
+  .mi-sug.open{display:block}
+  .mi-sug button{display:block;width:100%;text-align:left;background:none;color:var(--ink);border:0;
+                 border-bottom:1px solid #eee;padding:8px 10px;font-weight:600;font-size:.86rem;border-radius:0}
+  .mi-sug button:hover{background:#f4f0ff}
+  .mi-photo-lbl{background:#efeaff;color:var(--brand-d);border-radius:8px;padding:7px 10px;font-size:.85rem;cursor:pointer;white-space:nowrap}
+  .mi-photo-name{font-size:.78rem;margin-top:5px}
 </style>
 </head>
 <body>
@@ -529,22 +539,64 @@ $("newOrderBtn").onclick = async () => {
 };
 
 function addManualItem(){
-  const row = document.createElement("div"); row.className = "li-row";
-  row.innerHTML = `
-    <input class="mi-model" placeholder="Model (e.g. iPhone 13)" style="flex:2" />
-    <select class="mi-case" style="flex:1.6">${(CASE_TYPES||[]).map(c=>`<option value="${esc(c.id)}" data-price="${c.price}">${esc(c.name)} (${taka(c.price)})</option>`).join("")}</select>
-    <input class="mi-price" type="number" min="0" style="flex:1;max-width:90px" />
-    <button class="danger mi-del" style="padding:6px 10px">✕</button>`;
-  const caseSel = row.querySelector(".mi-case"), price = row.querySelector(".mi-price");
+  const item = document.createElement("div"); item.className = "li-item";
+  item.innerHTML = `
+    <div class="li-search">
+      <input class="mi-model" placeholder="Search phone model…" autocomplete="off" />
+      <div class="mi-sug"></div>
+    </div>
+    <div class="li-row">
+      <select class="mi-case" style="flex:1.6">${(CASE_TYPES||[]).map(c=>`<option value="${esc(c.id)}" data-price="${c.price}">${esc(c.name)} (${taka(c.price)})</option>`).join("")}</select>
+      <input class="mi-price" type="number" min="0" style="flex:1;max-width:84px" />
+      <label class="mi-photo-lbl">📷 Photo<input type="file" accept="image/*" class="mi-photo" style="display:none" /></label>
+      <button class="danger mi-del" style="padding:6px 10px">✕</button>
+    </div>
+    <div class="mi-photo-name muted"></div>`;
+  const caseSel = item.querySelector(".mi-case"), price = item.querySelector(".mi-price");
   const setPrice = () => { price.value = caseSel.selectedOptions[0] ? caseSel.selectedOptions[0].dataset.price : 0; manualTotals(); };
   caseSel.onchange = setPrice; price.oninput = manualTotals;
-  row.querySelector(".mi-del").onclick = () => { row.remove(); manualTotals(); };
-  $("mItems").appendChild(row); setPrice();
+  item.querySelector(".mi-del").onclick = () => { item.remove(); manualTotals(); };
+
+  // photo: keep the File on the element; show its name
+  const photoInput = item.querySelector(".mi-photo"), photoName = item.querySelector(".mi-photo-name");
+  photoInput.onchange = () => {
+    item._photo = photoInput.files[0] || null;
+    photoName.textContent = item._photo ? `📎 ${item._photo.name}` : "";
+  };
+
+  // phone-model autocomplete (server search over the phones table)
+  const modelInput = item.querySelector(".mi-model"), sug = item.querySelector(".mi-sug");
+  let t;
+  modelInput.addEventListener("input", () => {
+    clearTimeout(t);
+    const q = modelInput.value.trim();
+    if(q.length < 2){ sug.classList.remove("open"); return; }
+    t = setTimeout(async () => {
+      const { data } = await sb.from("phones").select("model_name").ilike("model_name", `%${q}%`).order("model_name").limit(8);
+      sug.innerHTML = "";
+      (data||[]).forEach(p => {
+        const b = document.createElement("button");
+        b.type = "button"; b.textContent = p.model_name;
+        b.onclick = () => { modelInput.value = p.model_name; sug.classList.remove("open"); };
+        sug.appendChild(b);
+      });
+      sug.classList.toggle("open", sug.children.length > 0);
+    }, 250);
+  });
+  modelInput.addEventListener("blur", () => setTimeout(()=>sug.classList.remove("open"), 150));
+
+  $("mItems").appendChild(item); setPrice();
 }
 function manualItems(){
-  return [...$("mItems").querySelectorAll(".li-row")].map(r => {
+  return [...$("mItems").querySelectorAll(".li-item")].map(r => {
     const cs = r.querySelector(".mi-case").selectedOptions[0];
-    return { caseTypeId: r.querySelector(".mi-case").value, caseType: cs ? cs.textContent.replace(/\s*\(.*/,"") : "", model: r.querySelector(".mi-model").value.trim(), price: Number(r.querySelector(".mi-price").value)||0 };
+    return {
+      caseTypeId: r.querySelector(".mi-case").value,
+      caseType: cs ? cs.textContent.replace(/\s*\(.*/,"") : "",
+      model: r.querySelector(".mi-model").value.trim(),
+      price: Number(r.querySelector(".mi-price").value)||0,
+      _photo: r._photo || null
+    };
   });
 }
 function manualTotals(){
@@ -555,7 +607,7 @@ function manualTotals(){
   return { sub, del, total: sub+del, items };
 }
 $("mSave").onclick = async () => {
-  const msg = $("mMsg"); msg.textContent = "";
+  const msg = $("mMsg"); msg.style.color = "var(--bad)"; msg.textContent = "";
   const name = $("mName").value.trim(), mobile = $("mMobile").value.trim();
   if(!name || !mobile){ msg.textContent = "Name and mobile are required."; return; }
   const { sub, del, total, items } = manualTotals();
@@ -563,15 +615,35 @@ $("mSave").onclick = async () => {
   if(!realItems.length){ msg.textContent = "Add at least one item with a model."; return; }
   $("mSave").disabled = true;
   const order_id = "CB" + Date.now().toString(36).toUpperCase().slice(-6) + Math.floor(Math.random()*36).toString(36).toUpperCase();
-  const { error } = await sb.from("orders").insert({
-    order_id, name, mobile, area: $("mArea").value, address: $("mAddr").value.trim(),
-    payment_method: $("mPay").value, items: realItems, subtotal: sub, delivery: del, discount: 0, total,
-    status: $("mStatus").value, note: $("mNote").value.trim(), photo_urls: []
-  });
+  try{
+    // upload any per-item photos to the order-photos bucket
+    const photo_urls = [];
+    for(let i = 0; i < realItems.length; i++){
+      const it = realItems[i];
+      if(it._photo){
+        msg.style.color = "var(--muted)"; msg.textContent = `Uploading photo ${i+1}…`;
+        const jpeg = await compressImage(await fileToDataUrl(it._photo));
+        const blob = await dataUrlToBlob(jpeg);
+        const path = `${order_id}/item${i+1}.jpg`;
+        const { error: upErr } = await sb.storage.from("order-photos").upload(path, blob, { contentType:"image/jpeg", upsert:false });
+        if(upErr) throw upErr;
+        photo_urls.push(sb.storage.from("order-photos").getPublicUrl(path).data.publicUrl);
+        it.hasPhoto = true;
+      }
+    }
+    const cleanItems = realItems.map(({ _photo, ...rest }) => rest);   // drop File before insert
+    const { error } = await sb.from("orders").insert({
+      order_id, name, mobile, area: $("mArea").value, address: $("mAddr").value.trim(),
+      payment_method: $("mPay").value, items: cleanItems, subtotal: sub, delivery: del, discount: 0, total,
+      status: $("mStatus").value, note: $("mNote").value.trim(), photo_urls
+    });
+    if(error) throw error;
+    $("manualModal").classList.add("hidden");
+    loadOrders(true);
+  }catch(err){
+    msg.style.color = "var(--bad)"; msg.textContent = err.message || "Couldn't save order";
+  }
   $("mSave").disabled = false;
-  if(error){ msg.textContent = error.message; return; }
-  $("manualModal").classList.add("hidden");
-  loadOrders(true);
 };
 
 /* ================= PROMOS ================= */
