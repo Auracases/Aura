@@ -215,6 +215,17 @@
   .design-scroll::-webkit-scrollbar-thumb{background:#D9CDB0;border-radius:99px;border:2px solid #FFFDF8;}
   .design-scroll::-webkit-scrollbar-track{background:transparent;}
 
+  /* big selected-design preview (below the grid; always present → no layout jump) */
+  .design-preview{margin-top:16px;border:2px solid var(--ink);border-radius:var(--radius);
+    box-shadow:var(--shadow);overflow:hidden;background:#fff;}
+  .design-preview .dp-img{height:320px;display:flex;align-items:center;justify-content:center;background:#F4EFE5;}
+  .design-preview .dp-img img{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in;display:block;}
+  .design-preview .dp-empty{height:320px;display:flex;align-items:center;justify-content:center;
+    color:var(--ink-soft);font-size:.88rem;text-align:center;padding:0 18px;}
+  .design-preview .dp-cap{padding:11px 14px;display:flex;justify-content:space-between;align-items:center;
+    font-weight:700;font-size:.95rem;border-top:2px solid var(--ink);}
+  .design-preview .dp-cap small{color:var(--accent-dark);font-weight:700;font-size:.76rem;}
+
   .design.selected{box-shadow:3px 3px 0 var(--accent);border-color:var(--accent);}
   .design .art{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.7rem;}
   .design .d-name{
@@ -428,6 +439,9 @@
     <div class="design-scroll"><div class="design-grid" id="designGrid"></div></div>
     <input type="file" id="fileInput" accept="image/*" style="display:none" />
     <div class="upload-warn" id="uploadWarn"></div>
+
+    <!-- big preview of the selected design (below the grid; always present so no layout jump) -->
+    <div id="designPreview" class="design-preview"></div>
 
     <div class="summary" id="summary"></div>
     <button class="big-btn" id="addBtn" disabled>Add to cart</button>
@@ -862,6 +876,8 @@ function renderDesigns(){
   up.innerHTML = `<div class="art">📷<span class="up-label">Upload your<br>own photo</span></div>`;
   up.onclick = () => $("fileInput").click();
   grid.appendChild(up);
+
+  renderDesignPreview();
 }
 
 /* ---------- preset design banner + share (ad deep-link feature) ---------- */
@@ -873,6 +889,20 @@ function renderDesignBanner(){
     b.classList.add("show");
   } else {
     b.classList.remove("show");
+  }
+  renderDesignPreview();
+}
+
+// big preview of the selected design — always rendered (fixed height) → no page jump
+function renderDesignPreview(){
+  const box = $("designPreview"); if(!box) return;
+  const d = state.design, src = d ? (d.kind === "preset" ? d.image_url : d.url) : null;
+  if(src){
+    box.innerHTML = `<div class="dp-img"><img src="${src}" alt="selected design" /></div>
+      <div class="dp-cap"><span>${escapeHtml(d.kind === "preset" ? (d.name || "Selected design") : "Your photo")}</span><small>🔍 tap to zoom</small></div>`;
+    box.querySelector("img").onclick = () => openLightbox(src, "image");
+  } else {
+    box.innerHTML = `<div class="dp-empty">Pick a design above — it previews here.</div>`;
   }
 }
 function designLink(id){ return location.origin + location.pathname + "?design=" + id; }
