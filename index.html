@@ -472,7 +472,7 @@
   </section>
 
   <!-- ============ STEP 3 : DESIGN ============ -->
-  <section class="step" id="step3">
+  <section class="step active" id="step3">
     <span class="step-tag">Step 3</span>
     <h2>Pick a design — or upload your own</h2>
 
@@ -845,7 +845,7 @@ $("changeModel").onclick = () => {
   modelInput.parentElement.querySelector(".mag").style.display = "";
   modelInput.focus();
   $("step2").classList.remove("active");
-  $("step3").classList.remove("active");
+  // step3 (design) stays active — users browse/pick designs before choosing a phone
   refreshSummary();
 };
 
