@@ -799,8 +799,9 @@ modelInput.addEventListener("input", () => {
   if(results.length === 0 && q.length >= 3){
     const btn = document.createElement("button");
     btn.className = "sug unknown";
-    btn.innerHTML = `<span>Use "<b>${escapeHtml(q)}</b>" anyway
-      <span class="u-note">Not in our hard-case list — TPU Soft &amp; UV Printed are always available ✓</span></span>`;
+    const alwaysNames = (CASES||[]).filter(c=>c.always_available).map(c=>c.name).join(" & ") || "soft cases";
+    btn.innerHTML = `<span>Order for "<b>${escapeHtml(q)}</b>" →
+      <span class="u-note">Fits any phone — ${escapeHtml(alwaysNames)} are available for every model ✓</span></span>`;
     btn.onclick = () => selectModel({name:q, d2:false, d3:false, known:false});
     sugBox.appendChild(btn);
   }
