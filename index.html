@@ -185,7 +185,6 @@
     cursor:pointer;position:relative;transition:transform .12s ease;
   }
   .case-card:active{transform:scale(.97);}
-  .case-card.always{border-color:var(--green);background:var(--green-bg);}
   .case-card.selected{background:#FFF1EC;border-color:var(--accent);box-shadow:3px 3px 0 var(--accent);}
   .case-card.unavail{opacity:.55;cursor:not-allowed;background:#F4EFE5;}
   .case-card h3{font-family:var(--font-display);font-weight:700;font-size:.95rem;letter-spacing:-.2px;}
@@ -788,7 +787,7 @@ modelInput.addEventListener("input", () => {
       <span class="badges">
         ${av.d2 ? '<span class="mini-badge mb-green">2D</span>' : ''}
         ${av.d3 ? '<span class="mini-badge mb-green">3D</span>' : ''}
-        <span class="mini-badge mb-soft">TPU·UV</span>
+        <span class="mini-badge mb-soft">TPU·Silicone</span>
       </span>`;
     btn.onclick = () => selectModel({...p, known:true});
     sugBox.appendChild(btn);
@@ -802,7 +801,7 @@ modelInput.addEventListener("input", () => {
     btn.className = "sug unknown";
     const alwaysNames = (CASES||[]).filter(c=>c.always_available).map(c=>c.name).join(" & ") || "soft cases";
     btn.innerHTML = `<span>Order for "<b>${escapeHtml(q)}</b>" →
-      <span class="u-note">🎉 Good news — we make cases for any phone! ${escapeHtml(alwaysNames)} ready for yours ✓</span></span>`;
+      <span class="u-note">${escapeHtml(alwaysNames)} available for your phone ✓</span></span>`;
     btn.onclick = () => selectModel({name:q, d2:false, d3:false, known:false});
     sugBox.appendChild(btn);
   }
@@ -862,12 +861,12 @@ function renderCases(){
     if(!caseOk(c)) continue;   // only show case types available for this phone
 
     const card = document.createElement("div");
-    card.className = "case-card" + (c.always_available ? " always" : "");
+    card.className = "case-card";
     card.innerHTML = `
       <h3>${escapeHtml(c.name)}</h3>
       <div class="price">${taka(c.price)}</div>
       <div class="desc">${escapeHtml(c.descr || "")}</div>
-      <span class="avail-tag t-ok">${c.always_available ? "Always available ✓" : "Available ✓"}</span>`;
+      <span class="avail-tag t-ok">Available ✓</span>`;
     card.onclick = () => {
       state.caseType = c;
       document.querySelectorAll(".case-card").forEach(el=>el.classList.remove("selected"));
