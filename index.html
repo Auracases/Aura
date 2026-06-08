@@ -802,7 +802,7 @@ modelInput.addEventListener("input", () => {
     btn.className = "sug unknown";
     const alwaysNames = (CASES||[]).filter(c=>c.always_available).map(c=>c.name).join(" & ") || "soft cases";
     btn.innerHTML = `<span>Order for "<b>${escapeHtml(q)}</b>" →
-      <span class="u-note">Fits any phone — ${escapeHtml(alwaysNames)} are available for every model ✓</span></span>`;
+      <span class="u-note">🎉 Good news — we make cases for any phone! ${escapeHtml(alwaysNames)} ready for yours ✓</span></span>`;
     btn.onclick = () => selectModel({name:q, d2:false, d3:false, known:false});
     sugBox.appendChild(btn);
   }
