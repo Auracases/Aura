@@ -801,7 +801,7 @@ modelInput.addEventListener("input", () => {
     btn.className = "sug unknown";
     const alwaysNames = (CASES||[]).filter(c=>c.always_available).map(c=>c.name).join(" & ") || "soft cases";
     btn.innerHTML = `<span>Order for "<b>${escapeHtml(q)}</b>" →
-      <span class="u-note">${escapeHtml(alwaysNames)} available for your phone ✓</span></span>`;
+      <span class="u-note">${escapeHtml(alwaysNames)} available ✓</span></span>`;
     btn.onclick = () => selectModel({name:q, d2:false, d3:false, known:false});
     sugBox.appendChild(btn);
   }
