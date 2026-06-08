@@ -15,7 +15,7 @@
    ================================================================== */
 (function () {
   var GA_ID        = "G-TR40T51EC7";        // Google Analytics 4 Measurement ID
-  var FB_PIXEL_ID  = "1003325708911348";    // Meta (Facebook) Pixel ID
+  var FB_PIXEL_ID  = "1346824020849136";    // Meta (Facebook) Pixel ID (second BM — the one running ads)
   var CLARITY_ID   = "x3gzriv05s";          // Microsoft Clarity project ID (heatmaps + session replay)
 
   /* ---- Google Analytics 4 (gtag.js) ---- */
