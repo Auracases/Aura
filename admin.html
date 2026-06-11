@@ -99,6 +99,13 @@
   .modal.hidden{display:none}
   .modal .sheet{background:#fff;border-radius:16px;max-width:560px;width:100%;padding:20px;margin:auto}
   .modal .x{float:right;background:#f1eff5;color:var(--ink);border-radius:8px;padding:4px 10px}
+  .ptable{width:100%;border-collapse:collapse;font-size:.88rem}
+  .ptable th{text-align:left;font-size:.74rem;color:var(--muted);font-weight:700;padding:6px 8px;border-bottom:1.5px solid var(--line)}
+  .ptable td{padding:8px;border-bottom:1px solid #eee;vertical-align:middle}
+  .chip{display:inline-flex;align-items:center;gap:5px;background:#f1eff5;border-radius:99px;padding:3px 10px;font-size:.8rem;font-weight:700}
+  .pe-bar{position:sticky;bottom:0;background:#fff;border-top:1.5px solid var(--line);padding:12px 0 2px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .md{font-size:.9rem;line-height:1.6} .md h1,.md h2,.md h3{margin:8px 0 4px} .md ul,.md ol{margin:6px 0 6px 20px} .md img{border-radius:8px}
+  .ct-rep .ct-rm{margin-top:4px}
   .li-item{border:1px solid var(--line);border-radius:10px;padding:9px;margin-bottom:9px;background:#faf9ff}
   .adm-lb{position:fixed;inset:0;background:rgba(0,0,0,.86);display:none;align-items:center;justify-content:center;z-index:300;padding:18px;cursor:zoom-out}
   .adm-lb.show{display:flex}
@@ -144,6 +151,8 @@
     <button data-tab="phones">Phones</button>
     <button data-tab="demos">Demos</button>
     <button data-tab="shop">Shop</button>
+    <button data-tab="reviews">Reviews</button>
+    <button data-tab="content">Content</button>
   </div>
 
   <!-- DESIGNS -->
@@ -202,8 +211,9 @@
       <input id="orderSearch" placeholder="Search name / mobile / order ID / tag…" class="grow" />
     </div>
     <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap">
-      <select id="oFilStatus" style="max-width:170px"><option value="">All statuses</option><option>New</option><option>Processing</option><option>Shipped</option><option>Delivered</option><option>Cancelled</option></select>
+      <select id="oFilStatus" style="max-width:170px"><option value="">All statuses</option><option>New</option><option>Confirmed</option><option>Packed</option><option>Shipped</option><option>Delivered</option><option>Cancelled</option></select>
       <select id="oFilPay" style="max-width:190px"><option value="">All payments</option><option>Cash on Delivery</option><option>bKash/Nagad</option></select>
+      <select id="oFilSource" style="max-width:160px"><option value="">All sources</option><option value="store">🛍 Shop</option><option value="custom">✏️ Customize</option><option value="mixed">Mixed</option></select>
     </div>
     <div class="bulk-bar"><label class="row" style="gap:6px;margin:0"><input type="checkbox" id="oSelAll" /> Select visible</label>
       <span class="grow"></span><button class="danger" id="oDelSel">Delete selected</button></div>
@@ -224,24 +234,92 @@
       <div id="pcatMsg" class="err" style="margin-top:6px"></div>
       <div id="pcatList" style="margin-top:10px"></div>
     </div>
-    <div class="card">
-      <h3>Add a product</h3>
-      <div class="wrap-row">
-        <div style="flex:2 1 200px"><label>Name</label><input id="spName" placeholder="e.g. Marble Glass Case" /></div>
-        <div style="flex:1 1 110px"><label>Price (৳)</label><input id="spPrice" type="number" min="0" /></div>
-        <div style="flex:1 1 110px"><label>Old price (optional)</label><input id="spOld" type="number" min="0" /></div>
-        <div style="flex:1 1 150px"><label>Category</label><select id="spCat"></select></div>
-        <div style="flex:1 1 180px"><label>Fits (model/note)</label><input id="spFit" placeholder="iPhone 15 Pro / Fits most" /></div>
-        <div style="flex:1 1 100%"><label>Description</label><textarea id="spDesc" style="min-height:60px"></textarea></div>
-        <div style="flex:1 1 100%"><label>Images (one or more)</label><input id="spImgs" type="file" accept="image/*" multiple /></div>
-      </div>
-      <div class="row" style="margin-top:12px;justify-content:space-between">
-        <label class="row" style="margin:0;gap:7px"><input type="checkbox" id="spActive" checked style="width:auto" /> Active</label>
-        <button id="spAddBtn">Add product</button>
-      </div>
-      <div id="spMsg" class="muted" style="font-size:.82rem;margin-top:8px"></div>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+      <div class="muted" id="shopCount"></div>
+      <div class="row" style="gap:8px"><button id="aiImportBtn" class="ghost">✨ AI import</button><button id="spNewBtn">+ New product</button></div>
     </div>
+    <div class="row" style="margin-bottom:8px"><input id="shopSearch" placeholder="Search products…" class="grow" /></div>
+    <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <select id="shopFilCat" style="max-width:180px"><option value="">All categories</option></select>
+      <select id="shopFilFlag" style="max-width:160px"><option value="">All products</option><option value="best">Best-sellers</option><option value="combo">Combos</option></select>
+      <select id="shopFilStock" style="max-width:160px"><option value="">Any stock</option><option value="in">In stock</option><option value="out">Out of stock</option></select>
+    </div>
+    <div class="bulk-bar"><label class="row" style="gap:6px;margin:0"><input type="checkbox" id="spSelAll" style="width:auto" /> Select all</label><span class="grow"></span><button class="danger" id="spDelSel">Delete selected</button></div>
     <div id="shopList"><div class="loading">Loading…</div></div>
+  </section>
+
+  <!-- PRODUCT EDITOR modal (full editor: Basics / Pricing&stock / Organization / Images) -->
+  <div id="prodModal" class="modal hidden"><div class="sheet" id="prodModalBody" style="max-width:720px"></div></div>
+
+  <!-- AI import modal (SP4) -->
+  <div id="aiModal" class="modal hidden"><div class="sheet" id="aiModalBody" style="max-width:760px"></div></div>
+
+  <!-- REVIEWS -->
+  <section id="tab-reviews" class="hidden">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+      <div class="muted" id="rvCount"></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <select id="rvFilProduct" style="max-width:220px"><option value="">All products</option></select>
+        <select id="rvFilStatus" style="max-width:150px"><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="">All</option></select>
+        <select id="rvFilRating" style="max-width:120px"><option value="">Any rating</option><option value="5">★ 5</option><option value="4">★ 4</option><option value="3">★ 3</option><option value="2">★ 2</option><option value="1">★ 1</option></select>
+      </div>
+    </div>
+    <div id="reviewsList"><div class="loading">Loading…</div></div>
+  </section>
+
+  <!-- SITE CONTENT -->
+  <section id="tab-content" class="hidden">
+    <div class="muted" style="font-size:.82rem;margin-bottom:10px">Edit storefront text, links and sections live — no redeploy. Each block has a show/hide toggle. Saved to <code>site_content</code>.</div>
+    <div class="card">
+      <h3>Store</h3>
+      <div style="flex:1 1 100%"><label>Store name</label><input id="ctName" /></div>
+    </div>
+    <div class="card">
+      <h3><label class="row" style="margin:0;gap:8px;cursor:pointer"><input type="checkbox" id="ctAnnShow" style="width:auto" /> Announcement bar</label></h3>
+      <div style="flex:1 1 100%"><label>Text</label><input id="ctAnnText" placeholder="Free delivery over ৳1500 · Cash on delivery" /></div>
+      <div style="flex:1 1 100%"><label>Link (optional)</label><input id="ctAnnLink" placeholder="shop.html" /></div>
+    </div>
+    <div class="card">
+      <h3><label class="row" style="margin:0;gap:8px;cursor:pointer"><input type="checkbox" id="ctHeroShow" style="width:auto" /> Hero slides</label></h3>
+      <div id="ctHero"></div>
+      <button class="ghost" id="ctHeroAdd" style="padding:5px 10px;font-size:.85rem;margin-top:6px">+ Add slide</button>
+    </div>
+    <div class="card">
+      <h3><label class="row" style="margin:0;gap:8px;cursor:pointer"><input type="checkbox" id="ctTrustShow" style="width:auto" /> Trust badges</label></h3>
+      <div id="ctTrust"></div>
+      <button class="ghost" id="ctTrustAdd" style="padding:5px 10px;font-size:.85rem;margin-top:6px">+ Add badge</button>
+    </div>
+    <div class="card">
+      <h3><label class="row" style="margin:0;gap:8px;cursor:pointer"><input type="checkbox" id="ctInfoShow" style="width:auto" /> Product info boxes (shown on every product page)</label></h3>
+      <div id="ctInfo"></div>
+      <button class="ghost" id="ctInfoAdd" style="padding:5px 10px;font-size:.85rem;margin-top:6px">+ Add box</button>
+    </div>
+    <div class="card">
+      <h3><label class="row" style="margin:0;gap:8px;cursor:pointer"><input type="checkbox" id="ctContactShow" style="width:auto" /> Contact</label></h3>
+      <div class="wrap-row">
+        <div style="flex:1 1 140px"><label>Phone</label><input id="ctPhone" /></div>
+        <div style="flex:1 1 180px"><label>Email</label><input id="ctEmail" /></div>
+        <div style="flex:1 1 100%"><label>Address</label><input id="ctAddress" /></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Social links</h3>
+      <div class="wrap-row">
+        <div style="flex:1 1 200px"><label>Facebook</label><input id="ctFb" /></div>
+        <div style="flex:1 1 200px"><label>Instagram</label><input id="ctIg" /></div>
+        <div style="flex:1 1 200px"><label>WhatsApp</label><input id="ctWa" /></div>
+        <div style="flex:1 1 200px"><label>TikTok</label><input id="ctTt" /></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Pinned nav categories</h3>
+      <div class="muted" style="font-size:.8rem;margin-bottom:8px">Tick categories to feature in the storefront "Browse categories" dropdown (in order ticked). Leave all unticked to show every category.</div>
+      <div id="ctNavCats"></div>
+    </div>
+    <div class="row" style="justify-content:space-between;margin-top:6px">
+      <span id="ctMsg" class="saved"></span>
+      <button id="ctSave">Save content</button>
+    </div>
   </section>
 
   <!-- full-image/video preview (designs, demos, order photos) -->
@@ -309,6 +387,11 @@
         <div style="flex:1 1 180px"><label>bKash / Nagad number</label><input id="setBkash" /></div>
         <div style="flex:1 1 120px"><label>Delivery — inside Dhaka</label><input type="number" id="setInside" /></div>
         <div style="flex:1 1 120px"><label>Delivery — outside Dhaka</label><input type="number" id="setOutside" /></div>
+      </div>
+      <div class="muted" style="font-size:.8rem;margin:10px 0 6px">Free-delivery rule: waive delivery when the subtotal reaches a threshold.</div>
+      <div class="wrap-row">
+        <label class="row" style="margin:0;gap:7px;cursor:pointer;flex:1 1 100%"><input type="checkbox" id="setFreeDelivActive" style="width:auto" /> Enable free delivery over a threshold</label>
+        <div style="flex:1 1 160px"><label>Free delivery over (৳)</label><input type="number" id="setFreeDelivThreshold" placeholder="1500" /></div>
       </div>
       <h3 style="margin-top:16px">Store-wide sale</h3>
       <div class="wrap-row">
@@ -423,7 +506,7 @@ const sb = (typeof supabase !== "undefined" && CONFIG.SUPABASE_URL && CONFIG.SUP
   ? supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
   : null;
 
-const STATUSES = ["New","Processing","Shipped","Delivered","Cancelled"];
+const STATUSES = ["New","Confirmed","Packed","Shipped","Delivered","Cancelled"];
 
 /* shrink an image before upload (max 1400px, JPEG ~0.85) */
 function compressImage(dataUrl, maxPx = 1400, quality = 0.85){
@@ -487,11 +570,11 @@ async function openOrderById(oid){
 
 /* ================= TABS ================= */
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
-const LOADERS = { designs:loadDesigns, orders:()=>loadOrders(true), promos:loadPromos, settings:loadSettings, phones:loadPhonesTab, demos:loadDemos, shop:loadShop };
+const LOADERS = { designs:loadDesigns, orders:()=>loadOrders(true), promos:loadPromos, settings:loadSettings, phones:loadPhonesTab, demos:loadDemos, shop:loadShop, reviews:loadReviews, content:loadContent };
 function loadPhonesTab(){ loadSync(); showPhoneSub("sheet"); }
 function switchTab(tab){
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
-  ["designs","orders","promos","settings","phones","demos","shop"].forEach(t => $("tab-"+t).classList.toggle("hidden", t !== tab));
+  ["designs","orders","promos","settings","phones","demos","shop","reviews","content"].forEach(t => $("tab-"+t).classList.toggle("hidden", t !== tab));
   (LOADERS[tab] || (()=>{}))();
 }
 
@@ -770,6 +853,7 @@ let ordSearchTimer;
 $("orderSearch").addEventListener("input", () => { clearTimeout(ordSearchTimer); ordSearchTimer = setTimeout(()=>loadOrders(true), 300); });
 $("oFilStatus").onchange = () => loadOrders(true);
 $("oFilPay").onchange = () => loadOrders(true);
+$("oFilSource").onchange = () => loadOrders(true);
 $("oSelAll").onclick = (e) => document.querySelectorAll("#ordersList .o-pick").forEach(c => c.checked = e.target.checked);
 $("oDelSel").onclick = async () => {
   const ids = [...document.querySelectorAll("#ordersList .o-pick")].filter(c => c.checked).map(c => Number(c.dataset.oid));
@@ -782,11 +866,12 @@ $("oDelSel").onclick = async () => {
 
 async function loadOrders(reset){
   const box = $("ordersList");
-  if(reset){ ORD.offset = 0; ORD.done = false; ORD.q = $("orderSearch").value.trim(); ORD.status = $("oFilStatus").value; ORD.pay = $("oFilPay").value; box.innerHTML = `<div class="loading">Loading…</div>`; }
+  if(reset){ ORD.offset = 0; ORD.done = false; ORD.q = $("orderSearch").value.trim(); ORD.status = $("oFilStatus").value; ORD.pay = $("oFilPay").value; ORD.source = $("oFilSource").value; box.innerHTML = `<div class="loading">Loading…</div>`; }
   let query = sb.from("orders").select("*").order("created_at",{ascending:false}).range(ORD.offset, ORD.offset + ORD.PAGE - 1);
   if(ORD.q){ const like = `%${ORD.q}%`; query = query.or(`name.ilike.${like},mobile.ilike.${like},order_id.ilike.${like},tags.ilike.${like}`); }
   if(ORD.status) query = query.eq("status", ORD.status);
   if(ORD.pay) query = query.eq("payment_method", ORD.pay);
+  if(ORD.source) query = query.eq("source", ORD.source);
   const { data, error } = await query;
   if(error){ box.innerHTML = `<div class="loading">Couldn't load.</div>`; return; }
   if(reset) box.innerHTML = "";
@@ -798,13 +883,18 @@ async function loadOrders(reset){
   $("ordersCount").textContent = `${box.querySelectorAll(".o-card").length} shown${ORD.q?` · "${ORD.q}"`:""}`;
 }
 
+function sourceBadge(src){
+  if(src==="store") return `<span class="pill" style="background:#ffe6dd;color:#b33a12">🛍 Shop</span>`;
+  if(src==="mixed") return `<span class="pill" style="background:#eee;color:#333">Mixed</span>`;
+  return `<span class="pill" style="background:#e6f0ff;color:#1b4fa0">✏️ Customize</span>`;
+}
 function orderCard(o){
   const card = document.createElement("div");
   card.className = "o-card";
   const tagChips = (o.tags||"").split(",").map(t=>t.trim()).filter(Boolean);
   card.innerHTML = `
     <div class="o-head">
-      <label class="row" style="gap:7px;margin:0"><input type="checkbox" class="o-pick" data-oid="${o.id}" /><span class="o-id">${esc(o.order_id)}</span></label>
+      <label class="row" style="gap:7px;margin:0"><input type="checkbox" class="o-pick" data-oid="${o.id}" /><span class="o-id">${esc(o.order_id)}</span>${sourceBadge(o.source)}</label>
       <select class="o-stat" style="width:auto;padding:5px 8px;font-weight:700">${STATUSES.map(s=>`<option ${s===(o.status||"New")?"selected":""}>${s}</option>`).join("")}</select>
     </div>
     <div class="o-meta">${esc(o.name||"")} · ${esc(o.mobile||"")} · ${esc(o.area==="insideDhaka"?"Inside Dhaka":"Outside Dhaka")} · ${esc(new Date(o.created_at).toLocaleString())}</div>
@@ -828,7 +918,7 @@ function openOrder(o){
   const imgs = orderImages(o);
   $("orderModalBody").innerHTML = `
     <button class="x" id="omClose">✕</button>
-    <h3 style="margin-bottom:2px">${esc(o.order_id)}</h3>
+    <h3 style="margin-bottom:2px">${esc(o.order_id)} ${sourceBadge(o.source)}</h3>
     <div class="muted" style="font-size:.82rem;margin-bottom:12px">${esc(new Date(o.created_at).toLocaleString())}</div>
     <div class="field"><label>Status</label><select id="omStatus">${STATUSES.map(s=>`<option ${s===o.status?"selected":""}>${s}</option>`).join("")}</select></div>
     <div class="o-meta"><b>${esc(o.name||"")}</b> · ${esc(o.mobile||"")}</div>
@@ -986,7 +1076,7 @@ $("mSave").onclick = async () => {
     const { error } = await sb.from("orders").insert({
       order_id, name, mobile, area: $("mArea").value, address: $("mAddr").value.trim(),
       payment_method: $("mPay").value, items: cleanItems, subtotal: sub, delivery: del, discount: 0, total,
-      status: $("mStatus").value, note: $("mNote").value.trim(), photo_urls
+      status: $("mStatus").value, note: $("mNote").value.trim(), photo_urls, source: "custom"
     });
     if(error) throw error;
     $("manualModal").classList.add("hidden");
@@ -1081,6 +1171,8 @@ async function loadSettings(){
     $("setSaleLabel").value = s.store_discount_label || "";
     $("setAnnounceActive").checked = !!s.announcement_active;
     $("setAnnounce").value = s.announcement || "";
+    $("setFreeDelivActive").checked = !!s.free_delivery_active;
+    $("setFreeDelivThreshold").value = s.free_delivery_threshold ?? "";
   }
   // notification config lives in its own admin-only table
   try{ const { data: nc } = await sb.from("notify_config").select("*").eq("id",1).single();
@@ -1098,7 +1190,9 @@ $("saveSettings").onclick = async () => {
     store_discount_value: Number($("setSaleValue").value) || 0,
     store_discount_label: $("setSaleLabel").value.trim(),
     announcement: $("setAnnounce").value.trim(),
-    announcement_active: $("setAnnounceActive").checked
+    announcement_active: $("setAnnounceActive").checked,
+    free_delivery_active: $("setFreeDelivActive").checked,
+    free_delivery_threshold: Number($("setFreeDelivThreshold").value) || 0
   }).eq("id", 1);
   // notification config → admin-only table
   const { error: ncErr } = await sb.from("notify_config").update({
@@ -1524,12 +1618,16 @@ async function renderDemoItems(){
 let PCATS = [];
 function pcatOptions(sel){ return `<option value="">— none —</option>` + PCATS.map(c=>`<option value="${c.id}" ${String(sel)===String(c.id)?"selected":""}>${esc(c.name)}</option>`).join(""); }
 
+let SHOP_PRODUCTS = [];
 async function loadShop(){
   const { data: cats } = await sb.from("product_categories").select("*").order("sort");
   PCATS = cats || [];
-  if($("spCat")) $("spCat").innerHTML = pcatOptions("");
+  // category filter dropdown
+  if($("shopFilCat")){ const prev=$("shopFilCat").value;
+    $("shopFilCat").innerHTML = `<option value="">All categories</option>` + PCATS.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    $("shopFilCat").value = prev; }
   renderPCats();
-  renderShopList();
+  await renderShopList();
 }
 $("pcatAdd").onclick = async () => {
   const n = $("pcatName").value.trim(), m = $("pcatMsg"); m.textContent = "";
@@ -1561,82 +1659,373 @@ async function uploadProductImages(files){
   }
   return urls;
 }
-$("spAddBtn").onclick = async () => {
-  const msg = $("spMsg"); msg.style.color = "var(--bad)"; msg.textContent = "";
-  const name = $("spName").value.trim(), price = Number($("spPrice").value)||0;
-  if(!name){ msg.textContent = "Name required."; return; }
-  if(!price){ msg.textContent = "Price required."; return; }
-  $("spAddBtn").disabled = true;
-  try{
-    msg.style.color = "var(--muted)"; msg.textContent = "Uploading images…";
-    const image_urls = await uploadProductImages([...$("spImgs").files]);
-    const { error } = await sb.from("readymade_products").insert({
-      name, price, old_price: $("spOld").value ? Number($("spOld").value) : null,
-      description: $("spDesc").value.trim(), category_id: $("spCat").value ? Number($("spCat").value) : null,
-      model_fit: $("spFit").value.trim(), image_urls, active: $("spActive").checked, sort: 0
-    });
-    if(error) throw error;
-    ["spName","spPrice","spOld","spDesc","spFit"].forEach(id=>$(id).value=""); $("spImgs").value=""; $("spActive").checked=true;
-    msg.style.color = "var(--ok)"; msg.textContent = "Added ✓";
-    renderShopList();
-  }catch(err){ msg.style.color = "var(--bad)"; msg.textContent = err.message || "Couldn't add"; }
-  $("spAddBtn").disabled = false;
-};
-
+/* ---------- product table (search + filters + bulk) ---------- */
+function slugify(s){ return (s||"").toString().toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""); }
+function pdisc(price,old){ return old && old>price ? Math.round((1-price/old)*100) : 0; }
+["shopSearch","shopFilCat","shopFilFlag","shopFilStock"].forEach(id=>{ const el=$(id); if(el) el[id==="shopSearch"?"oninput":"onchange"]=renderShopList; });
 async function renderShopList(){
   const box = $("shopList"); box.innerHTML = `<div class="loading">Loading…</div>`;
   const { data, error } = await sb.from("readymade_products").select("*").order("sort");
   if(error){ box.innerHTML = `<div class="loading">Couldn't load.</div>`; return; }
-  if(!data.length){ box.innerHTML = `<div class="loading">No products yet — add one above.</div>`; return; }
-  box.innerHTML = `<div class="bulk-bar"><label class="row" style="gap:6px;margin:0"><input type="checkbox" id="spSelAll" style="width:auto" /> Select all</label><span class="grow"></span><button class="danger" id="spDelSel">Delete selected</button></div><div class="d-grid"></div>`;
-  const grid = box.querySelector(".d-grid"); const refs = [];
-  data.forEach(p => {
-    const card = document.createElement("div"); card.className = "d-card";
-    const img = (p.image_urls&&p.image_urls[0])||"";
-    card.innerHTML = `
-      <div class="d-thumb" style="background-image:url('${esc(img)}')"></div>
-      <div class="d-body">
-        <div class="row" style="justify-content:space-between">
-          <label class="row" style="gap:6px;margin:0"><input type="checkbox" class="d-pick" style="width:auto" /><input class="f-name" value="${esc(p.name)}" style="font-weight:700;border:none;padding:2px 0" /></label>
-          <span class="pill ${p.active?"p-on":"p-off"}">${p.active?"Active":"Hidden"}</span>
-        </div>
-        <div class="row" style="gap:6px;margin-top:6px"><input type="number" class="f-price" value="${p.price}" style="width:90px;padding:4px 8px" placeholder="Price" /><input type="number" class="f-old" value="${p.old_price||""}" style="width:90px;padding:4px 8px" placeholder="Old" /><select class="f-cat" style="flex:1;padding:4px 8px">${pcatOptions(p.category_id)}</select></div>
-        <input class="f-fit" value="${esc(p.model_fit||"")}" placeholder="Fits…" style="margin-top:6px" />
-        <textarea class="f-desc" placeholder="Description" style="margin-top:6px;min-height:42px">${esc(p.description||"")}</textarea>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${(p.image_urls||[]).map(u=>`<div style="width:40px;height:40px;border-radius:6px;border:1px solid var(--line);background:#eee url('${esc(u)}') center/cover;cursor:zoom-in" data-img="${esc(u)}"></div>`).join("")}<label style="font-size:.72rem;border:1px dashed var(--line);border-radius:6px;padding:4px 8px;cursor:pointer">+ img<input type="file" accept="image/*" multiple class="f-addimg" style="display:none"/></label></div>
-        <div class="row" style="margin-top:6px"><label style="margin:0">Sort</label><input type="number" class="f-sort" value="${p.sort||0}" style="width:80px;padding:4px 8px" /></div>
-        <div class="saved"></div>
-        <div class="d-actions"><button class="ghost b-save">Save</button><button class="ghost b-toggle">${p.active?"Hide":"Show"}</button><button class="danger b-del">Remove</button></div>
-      </div>`;
-    card.querySelectorAll("[data-img]").forEach(el => el.onclick = () => admLB(el.dataset.img, "image"));
-    const th = card.querySelector(".d-thumb"); if(th){ th.style.cursor="zoom-in"; th.onclick = () => img && admLB(img,"image"); }
-    const saved = card.querySelector(".saved");
-    card.querySelector(".f-addimg").onchange = async (e) => {
-      try{ const more = await uploadProductImages([...e.target.files]); const urls = [...(p.image_urls||[]), ...more];
-        await sb.from("readymade_products").update({ image_urls: urls }).eq("id", p.id); renderShopList(); }catch(err){ alert(err.message); }
-    };
-    card.querySelector(".b-save").onclick = async (e) => {
-      e.target.disabled = true; const cv = card.querySelector(".f-cat").value;
-      const { error } = await sb.from("readymade_products").update({
-        name: card.querySelector(".f-name").value.trim(), price: Number(card.querySelector(".f-price").value)||0,
-        old_price: card.querySelector(".f-old").value ? Number(card.querySelector(".f-old").value) : null,
-        category_id: cv ? Number(cv) : null, model_fit: card.querySelector(".f-fit").value.trim(),
-        description: card.querySelector(".f-desc").value.trim(), sort: Number(card.querySelector(".f-sort").value)||0
-      }).eq("id", p.id);
-      saved.textContent = error ? "Failed" : "Saved ✓"; e.target.disabled = false; setTimeout(()=>saved.textContent="",1500);
-    };
-    card.querySelector(".b-toggle").onclick = async () => { await sb.from("readymade_products").update({ active: !p.active }).eq("id", p.id); renderShopList(); };
-    card.querySelector(".b-del").onclick = async () => { if(!confirm(`Remove "${p.name}"?`)) return; await sb.from("readymade_products").delete().eq("id", p.id); renderShopList(); };
-    grid.appendChild(card); refs.push({ card, p });
+  SHOP_PRODUCTS = data||[];
+  const q=($("shopSearch").value||"").trim().toLowerCase(), fcat=$("shopFilCat").value, fflag=$("shopFilFlag").value, fstock=$("shopFilStock").value;
+  let list = SHOP_PRODUCTS.slice();
+  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model_fit||"").toLowerCase().includes(q));
+  if(fcat) list=list.filter(p=>String(p.category_id)===String(fcat));
+  if(fflag==="best") list=list.filter(p=>p.best_seller);
+  if(fflag==="combo") list=list.filter(p=>p.is_combo);
+  if(fstock==="in") list=list.filter(p=>p.stock==null||p.stock>0);
+  if(fstock==="out") list=list.filter(p=>p.stock!=null&&p.stock<=0);
+  $("shopCount").textContent = `${list.length} of ${SHOP_PRODUCTS.length} product(s)`;
+  if(!list.length){ box.innerHTML = `<div class="loading">No products${SHOP_PRODUCTS.length?" match the filter":" yet — add one"}.</div>`; return; }
+  box.innerHTML = `<table class="ptable"><thead><tr>
+      <th style="width:30px"></th><th style="width:48px"></th><th>Product</th><th style="width:110px">Price</th>
+      <th style="width:80px">Stock</th><th style="width:90px">Rating</th><th style="width:70px">Status</th><th style="width:180px"></th>
+    </tr></thead><tbody></tbody></table>`;
+  const tb = box.querySelector("tbody"); const refs=[];
+  list.forEach(p=>{
+    const tr=document.createElement("tr"); const img=(p.image_urls&&p.image_urls[0])||"", d=pdisc(p.price,p.old_price);
+    const neg = p.stock!=null && p.stock<0;
+    tr.innerHTML=`
+      <td><input type="checkbox" class="p-pick" style="width:auto" /></td>
+      <td><div style="width:40px;height:40px;border-radius:7px;border:1px solid var(--line);background:#eee url('${esc(img)}') center/cover;cursor:zoom-in" data-img="${esc(img)}"></div></td>
+      <td><b>${esc(p.name)}</b>${p.best_seller?` <span class="pill" style="background:#e2f4eb;color:#0b8c5d">Best</span>`:""}${p.is_combo?` <span class="pill" style="background:#eee">Combo</span>`:""}
+        <div class="muted" style="font-size:.76rem">${esc(catNamePc(p.category_id))}${p.model_fit?" · "+esc(p.model_fit):""}</div></td>
+      <td>৳${p.price}${d?`<div class="muted" style="font-size:.74rem"><s>৳${p.old_price}</s> -${d}%</div>`:""}</td>
+      <td style="${neg?"color:var(--bad);font-weight:800":""}">${p.stock==null?"—":p.stock}</td>
+      <td>${p.rating_count?`${"★".repeat(Math.round(p.rating_avg))} ${p.rating_avg}<div class="muted" style="font-size:.72rem">(${p.rating_count})</div>`:`<span class="muted">—</span>`}</td>
+      <td><span class="pill ${p.active?"p-on":"p-off"}">${p.active?"Active":"Hidden"}</span></td>
+      <td style="text-align:right"><button class="ghost b-view" style="padding:5px 8px">View</button> <button class="ghost b-edit" style="padding:5px 8px">Edit</button> <button class="danger b-del" style="padding:5px 8px">Del</button></td>`;
+    tr.querySelector("[data-img]").onclick=()=>img&&admLB(img,"image");
+    tr.querySelector(".b-view").onclick=()=>window.open(`shop.html?p=${encodeURIComponent(p.slug||p.id)}`,"_blank");
+    tr.querySelector(".b-edit").onclick=()=>openProductEditor(p);
+    tr.querySelector(".b-del").onclick=async()=>{ if(!confirm(`Remove "${p.name}"?`)) return; await sb.from("readymade_products").delete().eq("id",p.id); renderShopList(); };
+    tb.appendChild(tr); refs.push({tr,p});
   });
-  $("spSelAll").onclick = (e) => refs.forEach(r => r.card.querySelector(".d-pick").checked = e.target.checked);
-  $("spDelSel").onclick = async () => {
-    const picked = refs.filter(r => r.card.querySelector(".d-pick").checked);
+  if($("spSelAll")) $("spSelAll").onclick=(e)=>refs.forEach(r=>r.tr.querySelector(".p-pick").checked=e.target.checked);
+  if($("spDelSel")) $("spDelSel").onclick=async()=>{ const picked=refs.filter(r=>r.tr.querySelector(".p-pick").checked);
     if(!picked.length){ alert("Tick products first."); return; }
     if(!confirm(`Delete ${picked.length} product(s)?`)) return;
-    await sb.from("readymade_products").delete().in("id", picked.map(r=>r.p.id)); renderShopList();
+    await sb.from("readymade_products").delete().in("id",picked.map(r=>r.p.id)); renderShopList(); };
+}
+function catNamePc(id){ const c=PCATS.find(c=>String(c.id)===String(id)); return c?c.name:""; }
+
+/* ---------- full product editor (Basics / Pricing&stock / Organization / Images / Description) ---------- */
+$("spNewBtn").onclick = () => openProductEditor(null);
+let EDIT_IMAGES=[], EDIT_VARS=[];
+function openProductEditor(p){
+  const isNew=!p || !p.id; p=p||{};
+  EDIT_IMAGES=(p.image_urls||[]).slice(); EDIT_VARS=(p.variants||[]).slice();
+  $("prodModalBody").innerHTML=`
+    <button class="x" id="peClose">✕</button>
+    <h3 style="margin-bottom:10px">${isNew?"New product":"Edit product"}</h3>
+    <div class="card"><h3>Basics</h3>
+      <div class="wrap-row">
+        <div style="flex:2 1 220px"><label>Name</label><input id="peName" value="${esc(p.name||"")}" /></div>
+        <div style="flex:1 1 160px"><label>Slug (URL)</label><input id="peSlug" value="${esc(p.slug||"")}" placeholder="auto from name" /></div>
+        <div style="flex:1 1 100%"><label>Fits (model / note)</label><input id="peFit" value="${esc(p.model_fit||"")}" placeholder="iPhone 15 Pro / Fits most" /></div>
+      </div></div>
+    <div class="card"><h3>Pricing &amp; stock</h3>
+      <div class="wrap-row">
+        <div style="flex:1 1 110px"><label>Price (৳)</label><input id="pePrice" type="number" min="0" value="${p.price??""}" /></div>
+        <div style="flex:1 1 110px"><label>Original price</label><input id="peOld" type="number" min="0" value="${p.old_price??""}" /></div>
+        <div style="flex:1 1 110px"><label>Discount</label><input id="peDisc" disabled placeholder="—" /></div>
+        <div style="flex:1 1 110px"><label>Stock (blank=untracked)</label><input id="peStock" type="number" value="${p.stock??""}" /></div>
+      </div></div>
+    <div class="card"><h3>Organization</h3>
+      <div class="wrap-row">
+        <div style="flex:1 1 180px"><label>Category</label><select id="peCat">${pcatOptions(p.category_id)}</select></div>
+        <div style="flex:1 1 120px"><label>Sort</label><input id="peSort" type="number" value="${p.sort||0}" /></div>
+        <div style="flex:1 1 100%;display:flex;gap:18px;align-items:center;margin-top:6px">
+          <label class="row" style="margin:0;gap:7px;cursor:pointer"><input type="checkbox" id="peActive" ${p.active!==false?"checked":""} style="width:auto" /> Active</label>
+          <label class="row" style="margin:0;gap:7px;cursor:pointer"><input type="checkbox" id="peBest" ${p.best_seller?"checked":""} style="width:auto" /> Best-seller</label>
+          <label class="row" style="margin:0;gap:7px;cursor:pointer"><input type="checkbox" id="peCombo" ${p.is_combo?"checked":""} style="width:auto" /> Combo</label>
+        </div>
+        <div style="flex:1 1 100%"><label>Variants (options like Black, Clear — shared price &amp; stock)</label>
+          <div id="peVarChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px"></div>
+          <div class="row"><input id="peVarInput" placeholder="Type an option, press Enter" /><button class="ghost" id="peVarAdd">Add</button></div>
+        </div>
+      </div></div>
+    <div class="card"><h3>Images</h3>
+      <div class="muted" style="font-size:.8rem;margin-bottom:6px">First image is the main one. Drag to reorder · paste a URL or upload.</div>
+      <div id="peImgs" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      <div class="row" style="margin-top:8px"><input id="peImgUrl" placeholder="Paste image URL…" /><button class="ghost" id="peImgUrlAdd">Add URL</button>
+        <label class="ghost" style="padding:8px 12px;border-radius:8px;cursor:pointer">Upload<input type="file" id="peImgFile" accept="image/*" multiple style="display:none" /></label></div>
+    </div>
+    <div class="card"><h3>Description (Markdown)</h3>
+      <div class="muted" style="font-size:.8rem;margin-bottom:6px">Use **bold**, *italic*, # headings, - lists, [links](url), ![alt](image-url). Insert an image to add its markdown.</div>
+      <div class="row" style="gap:6px;margin-bottom:6px"><button class="ghost" id="peMdBold" style="padding:4px 9px">B</button><button class="ghost" id="peMdH" style="padding:4px 9px">H</button><button class="ghost" id="peMdList" style="padding:4px 9px">• List</button>
+        <label class="ghost" style="padding:4px 9px;border-radius:8px;cursor:pointer">🖼 Image<input type="file" id="peMdImg" accept="image/*" style="display:none" /></label>
+        <button class="ghost" id="peMdPreview" style="padding:4px 9px;margin-left:auto">Preview</button></div>
+      <textarea id="peDesc" style="min-height:130px;font-family:monospace;font-size:.85rem">${esc(p.description||"")}</textarea>
+      <div id="peDescPreview" class="md hidden" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px"></div>
+    </div>
+    <div class="pe-bar"><span id="peMsg" class="err"></span><div class="row" style="gap:8px"><button class="ghost" id="peCancel">Cancel</button><button id="peSave">${isNew?"Create product":"Save changes"}</button></div></div>`;
+  $("prodModal").classList.remove("hidden");
+  // slug auto
+  $("peName").addEventListener("input",()=>{ if(!$("peSlug").value || $("peSlug").dataset.auto){ $("peSlug").value=slugify($("peName").value); $("peSlug").dataset.auto="1"; } });
+  $("peSlug").addEventListener("input",()=>{ $("peSlug").dataset.auto=""; });
+  if(isNew) $("peSlug").dataset.auto="1";
+  // discount auto-calc
+  const calcDisc=()=>{ const pr=Number($("pePrice").value)||0, old=Number($("peOld").value)||0; $("peDisc").value=pdisc(pr,old)?`-${pdisc(pr,old)}%`:"—"; };
+  $("pePrice").addEventListener("input",calcDisc); $("peOld").addEventListener("input",calcDisc); calcDisc();
+  // variants
+  renderVarChips();
+  $("peVarAdd").onclick=addVar; $("peVarInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addVar(); } });
+  // images
+  renderEditImgs();
+  $("peImgUrlAdd").onclick=()=>{ const u=$("peImgUrl").value.trim(); if(u){ EDIT_IMAGES.push(u); $("peImgUrl").value=""; renderEditImgs(); } };
+  $("peImgFile").onchange=async(e)=>{ try{ const more=await uploadProductImages([...e.target.files]); EDIT_IMAGES.push(...more); renderEditImgs(); }catch(err){ alert(err.message); } e.target.value=""; };
+  // markdown helpers
+  const ta=$("peDesc");
+  const wrap=(pre,post)=>{ const s=ta.selectionStart,e=ta.selectionEnd,v=ta.value; ta.value=v.slice(0,s)+pre+v.slice(s,e)+(post||"")+v.slice(e); ta.focus(); };
+  $("peMdBold").onclick=()=>wrap("**","**"); $("peMdH").onclick=()=>wrap("\n## ",""); $("peMdList").onclick=()=>wrap("\n- ","");
+  $("peMdImg").onchange=async(e)=>{ try{ const [u]=await uploadProductImages([e.target.files[0]]); wrap(`\n![image](${u})\n`,""); }catch(err){ alert(err.message); } e.target.value=""; };
+  $("peMdPreview").onclick=()=>{ const pv=$("peDescPreview"); pv.classList.toggle("hidden"); if(!pv.classList.contains("hidden")) pv.innerHTML=mdRender(ta.value); };
+  // actions
+  $("peClose").onclick=$("peCancel").onclick=()=>$("prodModal").classList.add("hidden");
+  $("peSave").onclick=()=>saveProduct(isNew?null:p.id);
+}
+function renderVarChips(){
+  $("peVarChips").innerHTML = EDIT_VARS.length?EDIT_VARS.map((v,i)=>`<span class="chip">${esc(v)} <b data-rm="${i}" style="cursor:pointer">✕</b></span>`).join(""):`<span class="muted" style="font-size:.8rem">No variants</span>`;
+  $("peVarChips").querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{ EDIT_VARS.splice(+b.dataset.rm,1); renderVarChips(); });
+}
+function addVar(){ const v=$("peVarInput").value.trim(); if(v&&!EDIT_VARS.includes(v)){ EDIT_VARS.push(v); $("peVarInput").value=""; renderVarChips(); } }
+function renderEditImgs(){
+  const box=$("peImgs");
+  box.innerHTML = EDIT_IMAGES.length?EDIT_IMAGES.map((u,i)=>`
+    <div class="pe-img" draggable="true" data-i="${i}" style="position:relative;width:74px;height:74px;border:2px solid var(--line);border-radius:9px;background:#eee url('${esc(u)}') center/cover">
+      ${i===0?`<span style="position:absolute;top:-8px;left:-4px;background:var(--ok,#0b8c5d);color:#fff;font-size:.62rem;font-weight:800;padding:1px 5px;border-radius:6px">MAIN</span>`:""}
+      <b data-rm="${i}" style="position:absolute;top:-8px;right:-6px;background:#b3261e;color:#fff;border-radius:99px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.7rem">✕</b>
+    </div>`).join(""):`<span class="muted" style="font-size:.8rem">No images yet.</span>`;
+  box.querySelectorAll("[data-rm]").forEach(b=>b.onclick=(e)=>{ e.stopPropagation(); EDIT_IMAGES.splice(+b.dataset.rm,1); renderEditImgs(); });
+  let drag=null;
+  box.querySelectorAll(".pe-img").forEach(el=>{
+    el.ondragstart=()=>drag=+el.dataset.i;
+    el.ondragover=(e)=>e.preventDefault();
+    el.ondrop=()=>{ const to=+el.dataset.i; if(drag!=null&&drag!==to){ const [m]=EDIT_IMAGES.splice(drag,1); EDIT_IMAGES.splice(to,0,m); renderEditImgs(); } drag=null; };
+  });
+}
+async function saveProduct(id){
+  const msg=$("peMsg"); msg.style.color="var(--bad)"; msg.textContent="";
+  const name=$("peName").value.trim(), price=Number($("pePrice").value)||0;
+  if(!name){ msg.textContent="Name required."; return; }
+  if(!price){ msg.textContent="Price required."; return; }
+  let slug=slugify($("peSlug").value||name);
+  // ensure unique slug (skip self)
+  if(SHOP_PRODUCTS.some(p=>p.slug===slug && p.id!==id)) slug=slug+"-"+Date.now().toString(36).slice(-4);
+  const row={ name, slug, price,
+    old_price: $("peOld").value?Number($("peOld").value):null,
+    stock: $("peStock").value===""?null:Number($("peStock").value),
+    category_id: $("peCat").value?Number($("peCat").value):null,
+    sort: Number($("peSort").value)||0, model_fit: $("peFit").value.trim(),
+    description: $("peDesc").value, image_urls: EDIT_IMAGES, variants: EDIT_VARS,
+    active: $("peActive").checked, best_seller: $("peBest").checked, is_combo: $("peCombo").checked };
+  $("peSave").disabled=true;
+  const { error } = id ? await sb.from("readymade_products").update(row).eq("id",id)
+                       : await sb.from("readymade_products").insert(row);
+  $("peSave").disabled=false;
+  if(error){ msg.textContent=error.message; return; }
+  $("prodModal").classList.add("hidden"); renderShopList();
+}
+
+/* ================= REVIEWS ================= */
+async function loadReviews(){
+  // product filter options
+  if(!SHOP_PRODUCTS.length){ const { data } = await sb.from("readymade_products").select("id,name").order("sort"); SHOP_PRODUCTS=data||SHOP_PRODUCTS; }
+  if($("rvFilProduct") && $("rvFilProduct").children.length<=1)
+    $("rvFilProduct").innerHTML=`<option value="">All products</option>`+SHOP_PRODUCTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  renderReviews();
+}
+["rvFilProduct","rvFilStatus","rvFilRating"].forEach(id=>{ const el=$(id); if(el) el.onchange=renderReviews; });
+async function renderReviews(){
+  const box=$("reviewsList"); box.innerHTML=`<div class="loading">Loading…</div>`;
+  let q=sb.from("reviews").select("*").order("created_at",{ascending:false});
+  const fp=$("rvFilProduct").value, fs=$("rvFilStatus").value, fr=$("rvFilRating").value;
+  if(fp) q=q.eq("product_id",fp); if(fs) q=q.eq("status",fs); if(fr) q=q.eq("rating",Number(fr));
+  const { data, error } = await q;
+  if(error){ box.innerHTML=`<div class="loading">Couldn't load.</div>`; return; }
+  $("rvCount").textContent=`${(data||[]).length} review(s)`;
+  if(!data.length){ box.innerHTML=`<div class="loading">No reviews.</div>`; return; }
+  const pname=(id)=>{ const p=SHOP_PRODUCTS.find(p=>String(p.id)===String(id)); return p?p.name:`#${id}`; };
+  box.innerHTML="";
+  data.forEach(r=>{
+    const row=document.createElement("div"); row.className="card"; row.style.marginBottom="8px";
+    row.innerHTML=`<div class="row" style="justify-content:space-between"><div><b>${esc(r.author_name)}</b> <span style="color:#FF4B1F">${"★".repeat(r.rating)}</span>
+        <span class="pill ${r.status==="approved"?"p-on":r.status==="rejected"?"p-off":""}" style="${r.status==="pending"?"background:#fff3cd;color:#8a6d00":""}">${r.status}</span></div>
+        <span class="muted" style="font-size:.78rem">${esc(pname(r.product_id))} · ${new Date(r.created_at).toLocaleDateString()}</span></div>
+      ${r.body?`<div style="margin:6px 0;font-size:.9rem">${esc(r.body)}</div>`:""}
+      <div class="row" style="gap:8px;margin-top:6px">
+        ${r.status!=="approved"?`<button class="ghost b-ok">Approve</button>`:""}
+        ${r.status!=="rejected"?`<button class="ghost b-no">Reject</button>`:""}
+        <button class="danger b-del">Delete</button></div>`;
+    row.querySelector(".b-ok") && (row.querySelector(".b-ok").onclick=async()=>{ await sb.from("reviews").update({status:"approved"}).eq("id",r.id); renderReviews(); });
+    row.querySelector(".b-no") && (row.querySelector(".b-no").onclick=async()=>{ await sb.from("reviews").update({status:"rejected"}).eq("id",r.id); renderReviews(); });
+    row.querySelector(".b-del").onclick=async()=>{ if(!confirm("Delete this review?")) return; await sb.from("reviews").delete().eq("id",r.id); renderReviews(); };
+    box.appendChild(row);
+  });
+}
+
+/* ================= SITE CONTENT ================= */
+let CONTENT={};
+function repAdd(container, html){ const d=document.createElement("div"); d.className="ct-rep"; d.innerHTML=html; container.appendChild(d); return d; }
+async function loadContent(){
+  if(!PCATS.length){ const { data } = await sb.from("product_categories").select("*").order("sort"); PCATS=data||[]; }
+  let { data } = await sb.from("site_content").select("content").eq("id",1).single();
+  CONTENT = deepMergeAdmin(JSON.parse(JSON.stringify(CONFIG.SITE_DEFAULTS||{})), (data&&data.content)||{});
+  const c=CONTENT;
+  $("ctName").value=c.store_name||"";
+  $("ctAnnShow").checked=!!(c.announcement&&c.announcement.show); $("ctAnnText").value=(c.announcement&&c.announcement.text)||""; $("ctAnnLink").value=(c.announcement&&c.announcement.link)||"";
+  $("ctHeroShow").checked=!!(c.hero&&c.hero.show); $("ctTrustShow").checked=!!(c.trust_badges&&c.trust_badges.show); $("ctInfoShow").checked=!!(c.product_info_boxes&&c.product_info_boxes.show);
+  $("ctContactShow").checked=!!(c.contact&&c.contact.show!==false);
+  $("ctPhone").value=(c.contact&&c.contact.phone)||""; $("ctEmail").value=(c.contact&&c.contact.email)||""; $("ctAddress").value=(c.contact&&c.contact.address)||"";
+  $("ctFb").value=(c.social&&c.social.facebook)||""; $("ctIg").value=(c.social&&c.social.instagram)||""; $("ctWa").value=(c.social&&c.social.whatsapp)||""; $("ctTt").value=(c.social&&c.social.tiktok)||"";
+  // repeaters
+  $("ctHero").innerHTML=""; ((c.hero&&c.hero.slides)||[]).forEach(s=>addHeroRow(s));
+  $("ctTrust").innerHTML=""; ((c.trust_badges&&c.trust_badges.items)||[]).forEach(b=>addTrustRow(b));
+  $("ctInfo").innerHTML=""; ((c.product_info_boxes&&c.product_info_boxes.items)||[]).forEach(b=>addInfoRow(b));
+  // nav cats
+  const pinned=(c.nav_categories||[]).map(String);
+  $("ctNavCats").innerHTML=PCATS.map(cat=>`<label class="row" style="gap:7px;margin:3px 0;cursor:pointer"><input type="checkbox" class="ct-navcat" value="${cat.id}" ${pinned.includes(String(cat.id))?"checked":""} style="width:auto" /> ${esc(cat.name)}</label>`).join("")||`<span class="muted" style="font-size:.8rem">No categories.</span>`;
+}
+function deepMergeAdmin(base,over){ if(over===null||typeof over!=="object"||Array.isArray(over)) return over===undefined?base:over;
+  const out=Array.isArray(base)?base.slice():Object.assign({},base);
+  for(const k in over){ const bv=base&&base[k]; out[k]=(bv&&typeof bv==="object"&&!Array.isArray(bv)&&over[k]&&typeof over[k]==="object"&&!Array.isArray(over[k]))?deepMergeAdmin(bv,over[k]):over[k]; }
+  return out; }
+function repRemoveBtn(){ return `<button class="danger ct-rm" style="padding:3px 8px;font-size:.78rem">Remove</button>`; }
+function addHeroRow(s){ s=s||{}; const d=repAdd($("ctHero"),`
+  <div class="wrap-row" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:6px">
+    <div style="flex:1 1 100%"><label>Title</label><input class="h-title" value="${esc(s.title||"")}" /></div>
+    <div style="flex:1 1 100%"><label>Subtitle</label><input class="h-sub" value="${esc(s.subtitle||"")}" /></div>
+    <div style="flex:1 1 200px"><label>Image URL</label><input class="h-img" value="${esc(s.image||"")}" /></div>
+    <div style="flex:1 1 130px"><label>Button text</label><input class="h-cta" value="${esc(s.cta_text||"")}" /></div>
+    <div style="flex:1 1 130px"><label>Button link</label><input class="h-link" value="${esc(s.cta_link||"")}" /></div>
+    <div style="flex:1 1 100%;text-align:right">${repRemoveBtn()}</div></div>`);
+  d.querySelector(".ct-rm").onclick=()=>d.remove(); }
+function addTrustRow(b){ b=b||{}; const d=repAdd($("ctTrust"),`
+  <div class="row" style="gap:8px;margin-bottom:6px"><input class="t-icon" value="${esc(b.icon||"")}" placeholder="🚚" style="max-width:70px" /><input class="t-label" value="${esc(b.label||"")}" placeholder="Cash on delivery" class="grow" />${repRemoveBtn()}</div>`);
+  d.querySelector(".ct-rm").onclick=()=>d.remove(); }
+function addInfoRow(b){ b=b||{}; const d=repAdd($("ctInfo"),`
+  <div class="wrap-row" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:6px">
+    <div style="flex:1 1 160px"><label>Title</label><input class="i-title" value="${esc(b.title||"")}" /></div>
+    <div style="flex:2 1 220px"><label>Body</label><input class="i-body" value="${esc(b.body||"")}" /></div>
+    <div style="flex:1 1 100%;text-align:right">${repRemoveBtn()}</div></div>`);
+  d.querySelector(".ct-rm").onclick=()=>d.remove(); }
+$("ctHeroAdd").onclick=()=>addHeroRow(); $("ctTrustAdd").onclick=()=>addTrustRow(); $("ctInfoAdd").onclick=()=>addInfoRow();
+$("ctSave").onclick=async()=>{
+  const msg=$("ctMsg"); msg.style.color="var(--muted)"; msg.textContent="Saving…";
+  const content={
+    store_name:$("ctName").value.trim(),
+    announcement:{ show:$("ctAnnShow").checked, text:$("ctAnnText").value.trim(), link:$("ctAnnLink").value.trim() },
+    hero:{ show:$("ctHeroShow").checked, slides:[...$("ctHero").querySelectorAll(".ct-rep")].map(r=>({
+      title:r.querySelector(".h-title").value.trim(), subtitle:r.querySelector(".h-sub").value.trim(),
+      image:r.querySelector(".h-img").value.trim(), cta_text:r.querySelector(".h-cta").value.trim(), cta_link:r.querySelector(".h-link").value.trim() })) },
+    trust_badges:{ show:$("ctTrustShow").checked, items:[...$("ctTrust").querySelectorAll(".ct-rep")].map(r=>({ icon:r.querySelector(".t-icon").value.trim(), label:r.querySelector(".t-label").value.trim() })) },
+    product_info_boxes:{ show:$("ctInfoShow").checked, items:[...$("ctInfo").querySelectorAll(".ct-rep")].map(r=>({ title:r.querySelector(".i-title").value.trim(), body:r.querySelector(".i-body").value.trim() })) },
+    contact:{ show:$("ctContactShow").checked, phone:$("ctPhone").value.trim(), email:$("ctEmail").value.trim(), address:$("ctAddress").value.trim() },
+    social:{ facebook:$("ctFb").value.trim(), instagram:$("ctIg").value.trim(), whatsapp:$("ctWa").value.trim(), tiktok:$("ctTt").value.trim() },
+    nav_categories:[...$("ctNavCats").querySelectorAll(".ct-navcat:checked")].map(c=>Number(c.value))
+  };
+  const { error } = await sb.from("site_content").update({ content, updated_at:new Date().toISOString() }).eq("id",1);
+  msg.style.color=error?"var(--bad)":"var(--ok)"; msg.textContent=error?("Failed: "+error.message):"Saved ✓"; setTimeout(()=>msg.textContent="",2000);
+};
+
+/* tiny markdown renderer for the editor preview (mirrors storefront md()) */
+function mdRender(src){
+  if(!src) return "";
+  const e=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const inline=t=>e(t).replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g,'<img alt="$1" src="$2" style="max-width:100%">')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,'<a href="$2" target="_blank">$1</a>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/(^|[^*])\*([^*]+)\*/g,'$1<em>$2</em>');
+  const lines=String(src).replace(/\r/g,"").split("\n"); let html="",list=null; const cl=()=>{ if(list){html+=`</${list}>`;list=null;} };
+  for(const raw of lines){ const ln=raw.trim(); let m;
+    if(!ln){ cl(); continue; }
+    if((m=ln.match(/^(#{1,3})\s+(.*)$/))){ cl(); html+=`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`; continue; }
+    if((m=ln.match(/^[-*]\s+(.*)$/))){ if(list!=="ul"){cl();list="ul";html+="<ul>";} html+=`<li>${inline(m[1])}</li>`; continue; }
+    cl(); html+=`<p>${inline(ln)}</p>`; }
+  cl(); return html;
+}
+
+/* ================= AI IMPORT (SP4 — Edge Functions) ================= */
+$("aiImportBtn").onclick=openAiModal;
+function openAiModal(){
+  $("aiModalBody").innerHTML=`
+    <button class="x" id="aiClose">✕</button>
+    <h3 style="margin-bottom:4px">✨ AI product import</h3>
+    <div class="muted" style="font-size:.82rem;margin-bottom:10px">Paste a product or category URL. We read the page on the server (JSON-LD first, then GPT-4o-mini). JS-rendered/SPA sites may return nothing.</div>
+    <div class="bulk-bar" style="background:#f4f0ff">
+      <label class="row" style="gap:6px;margin:0;cursor:pointer"><input type="radio" name="aiMode" value="product" checked style="width:auto" /> Single product</label>
+      <label class="row" style="gap:6px;margin:0;cursor:pointer"><input type="radio" name="aiMode" value="category" style="width:auto" /> Category page</label>
+    </div>
+    <div class="row" style="margin:10px 0"><input id="aiUrl" placeholder="https://store.example.com/product/…" class="grow" /><button id="aiGo">Fetch</button></div>
+    <div id="aiErr" class="err"></div>
+    <div id="aiResult" style="margin-top:10px"></div>`;
+  $("aiModal").classList.remove("hidden");
+  $("aiClose").onclick=()=>$("aiModal").classList.add("hidden");
+  $("aiGo").onclick=runAiImport;
+}
+async function runAiImport(){
+  const url=$("aiUrl").value.trim(), mode=document.querySelector("input[name=aiMode]:checked").value;
+  const err=$("aiErr"), out=$("aiResult"); err.textContent=""; out.innerHTML="";
+  if(!/^https?:\/\//i.test(url)){ err.textContent="Enter a valid http(s) URL."; return; }
+  const btn=$("aiGo"); btn.disabled=true; btn.textContent="Fetching…";
+  try{
+    const fn = mode==="product"?"import-product":"list-category";
+    const { data, error } = await sb.functions.invoke(fn, { body:{ url } });
+    if(error) throw error;
+    if(!data || data.ok===false) throw new Error((data&&data.error)||"Import failed");
+    if(mode==="product") showAiProduct(data.product, data.source);
+    else showAiCategory(data.items||[], data.note);
+  }catch(e){ err.textContent="Import failed — "+(e.message||"try again"); }
+  btn.disabled=false; btn.textContent="Fetch";
+}
+function showAiProduct(p,source){
+  $("aiResult").innerHTML=`<div class="card"><div class="muted" style="font-size:.78rem;margin-bottom:6px">Extracted via ${esc(source)}. Review then open in the editor.</div>
+    <div class="row" style="gap:10px"><div style="width:80px;height:80px;border-radius:9px;border:1px solid var(--line);background:#eee url('${esc((p.images&&p.images[0])||"")}') center/cover"></div>
+      <div style="flex:1"><b>${esc(p.name||"(no name)")}</b><div>৳${p.price||"?"}${p.original_price?` <s class="muted">৳${p.original_price}</s>`:""}</div>
+        <div class="muted" style="font-size:.8rem">${(p.images||[]).length} image(s)</div></div></div>
+    <div class="row" style="justify-content:flex-end;margin-top:10px"><button id="aiToEditor">Open in product editor →</button></div></div>`;
+  $("aiToEditor").onclick=()=>{
+    $("aiModal").classList.add("hidden");
+    openProductEditor({ name:p.name, description:p.description, price:p.price||0, old_price:p.original_price||null, image_urls:p.images||[] });
   };
 }
+function showAiCategory(items,note){
+  const out=$("aiResult");
+  if(!items.length){ out.innerHTML=`<div class="loading">${esc(note||"No products found.")}</div>`; return; }
+  out.innerHTML=`${note?`<div class="muted" style="font-size:.8rem;margin-bottom:6px">${esc(note)}</div>`:""}
+    <div class="row" style="gap:8px;margin-bottom:8px;align-items:center"><label style="margin:0">Import into</label><select id="aiCat" style="max-width:200px">${pcatOptions("")}</select>
+      <span class="grow"></span><button id="aiImportSel">Import selected</button></div>
+    <table class="ptable"><thead><tr><th style="width:30px"><input type="checkbox" id="aiSelAll" style="width:auto" checked/></th><th style="width:48px"></th><th>Name</th><th style="width:110px">Price</th></tr></thead><tbody></tbody></table>
+    <div id="aiImpMsg" class="muted" style="font-size:.82rem;margin-top:6px"></div>`;
+  const tb=out.querySelector("tbody"); const refs=[];
+  items.forEach(it=>{ const tr=document.createElement("tr");
+    tr.innerHTML=`<td><input type="checkbox" class="ai-pick" checked style="width:auto" /></td>
+      <td><div style="width:40px;height:40px;border-radius:7px;border:1px solid var(--line);background:#eee url('${esc(it.image||"")}') center/cover"></div></td>
+      <td><input class="ai-name" value="${esc(it.name||"")}" /></td>
+      <td><input class="ai-price" type="number" value="${it.price||""}" style="width:90px" /></td>`;
+    tb.appendChild(tr); refs.push({tr,it});
+  });
+  $("aiSelAll").onclick=(e)=>refs.forEach(r=>r.tr.querySelector(".ai-pick").checked=e.target.checked);
+  $("aiImportSel").onclick=async()=>{
+    const cat=$("aiCat").value?Number($("aiCat").value):null, msg=$("aiImpMsg");
+    const picked=refs.filter(r=>r.tr.querySelector(".ai-pick").checked).map(r=>({
+      name:r.tr.querySelector(".ai-name").value.trim(), price:Number(r.tr.querySelector(".ai-price").value)||0, image:r.it.image }))
+      .filter(p=>p.name);
+    if(!picked.length){ msg.textContent="Tick at least one row."; return; }
+    msg.style.color="var(--muted)"; msg.textContent=`Importing ${picked.length}…`;
+    const rows=picked.map((p,i)=>({ name:p.name, slug:slugify(p.name)+"-"+(Date.now().toString(36).slice(-3))+i, price:p.price,
+      category_id:cat, image_urls:p.image?[p.image]:[], active:true, sort:0 }));
+    const { error } = await sb.from("readymade_products").insert(rows);
+    if(error){ msg.style.color="var(--bad)"; msg.textContent="Failed: "+error.message; return; }
+    msg.style.color="var(--ok)"; msg.textContent=`Imported ${rows.length} product(s) ✓`;
+    setTimeout(()=>{ $("aiModal").classList.add("hidden"); if(!$("tab-shop").classList.contains("hidden")) renderShopList(); },900);
+  };
+}
+
+/* close product/AI modals on backdrop click */
+$("prodModal").onclick=(e)=>{ if(e.target.id==="prodModal") $("prodModal").classList.add("hidden"); };
+$("aiModal").onclick=(e)=>{ if(e.target.id==="aiModal") $("aiModal").classList.add("hidden"); };
 
 boot();
 </script>

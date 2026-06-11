@@ -179,6 +179,7 @@ declare
   s public.settings; pr public.promos;
   disc int := 0; deliv int := 0; pd int;
   free_delivery boolean := false;
+  has_store boolean := false; has_custom boolean := false; src text;
   area text := payload->>'area';
   promo text := nullif(payload->>'promo_code','');
   oid text := payload->>'order_id';
@@ -188,11 +189,15 @@ begin
   for it in select value from jsonb_array_elements(coalesce(payload->'items','[]'::jsonb)) loop
     if it ? 'productId' then
       select price into cprice from public.readymade_products where id = (it->>'productId')::bigint and active;
+      has_store := true;
     else
       select price into cprice from public.case_types where id = it->>'caseTypeId';
+      has_custom := true;
     end if;
     sub := sub + coalesce(cprice,0) * greatest(coalesce(nullif(it->>'qty','')::int, 1), 1);
   end loop;
+  src := case when has_store and has_custom then 'mixed'
+              when has_store then 'store' else 'custom' end;
 
   deliv := case when area = 'insideDhaka' then coalesce(s.delivery_inside,0) else coalesce(s.delivery_outside,0) end;
 
@@ -224,15 +229,20 @@ begin
   end if;
 
   if free_delivery then deliv := 0; end if;
+  -- store-wide free-delivery rule (settings): if subtotal clears the threshold, waive delivery
+  if not free_delivery and s.free_delivery_active
+     and coalesce(s.free_delivery_threshold,0) > 0 and sub >= s.free_delivery_threshold then
+    deliv := 0; free_delivery := true;
+  end if;
   if disc > sub then disc := sub; end if;
 
   insert into public.orders
-    (order_id,name,mobile,area,address,payment_method,items,subtotal,delivery,discount,total,promo_code,photo_urls,status)
+    (order_id,name,mobile,area,address,payment_method,items,subtotal,delivery,discount,total,promo_code,photo_urls,status,source)
   values
     (oid, payload->>'name', payload->>'mobile', area, payload->>'address', payload->>'payment_method',
      coalesce(payload->'items','[]'::jsonb), sub, deliv, disc, (sub - disc + deliv), promo,
      coalesce((select array_agg(value) from jsonb_array_elements_text(payload->'photo_urls')), '{}'),
-     'New');
+     'New', src);
 
   return json_build_object('ok',true,'order_id',oid,'subtotal',sub,'delivery',deliv,
                            'discount',disc,'total',(sub - disc + deliv),'free_delivery',free_delivery);
@@ -590,6 +600,232 @@ create policy "admin write designs"    on storage.objects for insert to authenti
 create policy "admin update designs"   on storage.objects for update to authenticated using (bucket_id = 'designs');
 create policy "admin delete designs"   on storage.objects for delete to authenticated using (bucket_id = 'designs');
 create policy "anon upload order pics" on storage.objects for insert to anon, authenticated with check (bucket_id = 'order-photos');
+
+-- ====================================================================
+-- SP1 — FULL ECOMMERCE DATA LAYER (spec: docs/superpowers/specs/2026-06-12-ecommerce-sp1-data-layer-design.md)
+-- Grows the ready-made Shop into a full guest-checkout store. All additive
+-- + idempotent. Storefront = SP2, admin = SP3, AI import = SP4.
+-- ====================================================================
+
+-- ---------- A. readymade_products: new columns ----------
+alter table public.readymade_products add column if not exists slug         text;
+alter table public.readymade_products add column if not exists variants     text[] default '{}';  -- simple option labels; shared price+stock
+alter table public.readymade_products add column if not exists rating_avg   numeric(2,1) default 0; -- denormalized, maintained by trg_reviews_rollup
+alter table public.readymade_products add column if not exists rating_count int default 0;
+alter table public.readymade_products add column if not exists best_seller  boolean default false;
+alter table public.readymade_products add column if not exists is_combo     boolean default false;
+-- unique slug, ignoring nulls so the add is safe before backfill
+create unique index if not exists readymade_products_slug_idx
+  on public.readymade_products (slug) where slug is not null;
+-- description (existing text col) now holds Markdown; rendered by the storefront.
+
+-- ---------- B. reviews (customer-submitted, admin-approved) ----------
+create table if not exists public.reviews (
+  id          bigint generated always as identity primary key,
+  product_id  bigint references public.readymade_products(id) on delete cascade,
+  author_name text not null,
+  rating      int  not null check (rating between 1 and 5),
+  body        text default '',
+  status      text default 'pending',          -- pending | approved | rejected
+  created_at  timestamptz default now()
+);
+create index if not exists reviews_product_idx on public.reviews (product_id);
+alter table public.reviews enable row level security;
+-- public sees ONLY approved; admin (authenticated) sees all (policies OR together)
+drop policy if exists "public read approved reviews" on public.reviews;
+create policy "public read approved reviews" on public.reviews
+  for select to anon, authenticated using (status = 'approved');
+drop policy if exists "admin all reviews" on public.reviews;
+create policy "admin all reviews" on public.reviews
+  for all to authenticated using (true) with check (true);
+-- (no anon INSERT policy — submission goes through submit_review())
+
+-- Anon-safe review submission: always lands 'pending', validates inputs.
+create or replace function public.submit_review(
+  p_product_id bigint, p_name text, p_rating int, p_body text)
+returns json language plpgsql security definer set search_path = public as $$
+begin
+  if p_rating is null or p_rating < 1 or p_rating > 5 then
+    return json_build_object('ok',false,'error','Rating must be 1–5'); end if;
+  if coalesce(trim(p_name),'') = '' then
+    return json_build_object('ok',false,'error','Name required'); end if;
+  if not exists (select 1 from public.readymade_products where id = p_product_id) then
+    return json_build_object('ok',false,'error','Unknown product'); end if;
+  insert into public.reviews (product_id, author_name, rating, body, status)
+  values (p_product_id, trim(p_name), p_rating, coalesce(p_body,''), 'pending');
+  return json_build_object('ok',true);
+end $$;
+grant execute on function public.submit_review(bigint,text,int,text) to anon, authenticated;
+
+-- Recompute rating_avg/rating_count from APPROVED reviews on any change.
+create or replace function public.reviews_rollup() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare pid bigint := coalesce(NEW.product_id, OLD.product_id);
+begin
+  update public.readymade_products p set
+    rating_count = (select count(*) from public.reviews r where r.product_id = pid and r.status = 'approved'),
+    rating_avg   = coalesce((select round(avg(r.rating)::numeric,1)
+                             from public.reviews r where r.product_id = pid and r.status = 'approved'),0)
+  where p.id = pid;
+  return null;
+end $$;
+drop trigger if exists trg_reviews_rollup on public.reviews;
+create trigger trg_reviews_rollup after insert or update or delete on public.reviews
+  for each row execute function public.reviews_rollup();
+
+-- ---------- C. order_status_history + status triggers ----------
+alter table public.orders add column if not exists updated_at timestamptz default now();
+alter table public.orders add column if not exists source     text default 'custom';  -- store | custom | mixed
+
+create table if not exists public.order_status_history (
+  id         bigint generated always as identity primary key,
+  order_id   text not null references public.orders(order_id) on delete cascade,
+  status     text not null,
+  changed_at timestamptz default now()
+);
+create index if not exists osh_order_idx on public.order_status_history (order_id);
+alter table public.order_status_history enable row level security;
+drop policy if exists "admin all order_status_history" on public.order_status_history;
+create policy "admin all order_status_history" on public.order_status_history
+  for all to authenticated using (true) with check (true);
+-- (no anon policy — the public reads the timeline only via track_order())
+
+-- Status ladder used by the storefront timeline:
+--   New → Confirmed → Packed → Shipped → Delivered  (+ terminal Cancelled)
+-- Write the initial 'New' row on insert; a row + bump updated_at on each status change.
+create or replace function public.track_order_status() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if TG_OP = 'INSERT' then
+    insert into public.order_status_history (order_id, status) values (NEW.order_id, NEW.status);
+  elsif TG_OP = 'UPDATE' and NEW.status is distinct from OLD.status then
+    insert into public.order_status_history (order_id, status) values (NEW.order_id, NEW.status);
+    NEW.updated_at := now();
+  end if;
+  return NEW;
+end $$;
+drop trigger if exists trg_order_status_ins on public.orders;
+create trigger trg_order_status_ins after insert on public.orders
+  for each row execute function public.track_order_status();
+drop trigger if exists trg_order_status_upd on public.orders;
+create trigger trg_order_status_upd before update on public.orders
+  for each row execute function public.track_order_status();
+
+-- ---------- D. track_order RPC (public, PII-safe) ----------
+-- Match by order_id (exact, case-insensitive) OR mobile (digits-only). Returns a
+-- safe subset only — no address/note/tags — capped to the 5 most recent matches.
+create or replace function public.track_order(p_query text)
+returns json language plpgsql security definer set search_path = public as $$
+declare q text := trim(coalesce(p_query,'')); qd text;
+begin
+  if q = '' then return json_build_object('ok',false,'error','Enter an order number or mobile'); end if;
+  qd := regexp_replace(q, '\D', '', 'g');
+  return (
+    select json_build_object('ok', true, 'orders', coalesce(json_agg(t.o order by t.created_at desc), '[]'::json))
+    from (
+      select json_build_object(
+        'order_id',   ord.order_id,
+        'status',     ord.status,
+        'created_at', ord.created_at,
+        'updated_at', ord.updated_at,
+        'total',      ord.total,
+        'items', (select coalesce(json_agg(json_build_object(
+                     'name',    coalesce(i->>'name', i->>'caseType', 'item'),
+                     'qty',     coalesce((i->>'qty')::int, 1),
+                     'variant', i->>'variant')), '[]'::json)
+                  from jsonb_array_elements(coalesce(ord.items,'[]'::jsonb)) i),
+        'timeline', (select coalesce(json_agg(json_build_object('status', h.status, 'at', h.changed_at)
+                                              order by h.changed_at), '[]'::json)
+                     from public.order_status_history h where h.order_id = ord.order_id)
+      ) as o, ord.created_at
+      from public.orders ord
+      where upper(ord.order_id) = upper(q)
+         or (qd <> '' and regexp_replace(coalesce(ord.mobile,''), '\D', '', 'g') = qd)
+      order by ord.created_at desc
+      limit 5
+    ) t
+  );
+end $$;
+grant execute on function public.track_order(text) to anon, authenticated;
+
+-- ---------- F. settings: free-delivery rule ----------
+alter table public.settings add column if not exists free_delivery_active    boolean default false;
+alter table public.settings add column if not exists free_delivery_threshold int default 0;
+-- (place_order applies it: subtotal >= threshold → delivery waived)
+
+-- ---------- G. site_content: editable storefront content (deep-merged over config) ----------
+create table if not exists public.site_content (
+  id         int primary key default 1,
+  content    jsonb default '{}'::jsonb,
+  updated_at timestamptz default now(),
+  constraint site_content_singleton check (id = 1)
+);
+alter table public.site_content enable row level security;
+drop policy if exists "public read site_content" on public.site_content;
+create policy "public read site_content" on public.site_content
+  for select to anon, authenticated using (true);
+drop policy if exists "admin all site_content" on public.site_content;
+create policy "admin all site_content" on public.site_content
+  for all to authenticated using (true) with check (true);
+insert into public.site_content (id) values (1) on conflict (id) do nothing;
+-- content shape (every block has a "show" toggle; storefront deep-merges over CONFIG.SITE_DEFAULTS):
+-- { store_name, announcement{show,text,link}, hero{show,slides[]}, trust_badges{show,items[]},
+--   product_info_boxes{show,items[]}, contact{show,phone,email,address}, social{...}, nav_categories[ids] }
+
+-- ---------- H. is_admin() — gate for SP4 Edge Functions ----------
+create or replace function public.is_admin()
+returns boolean language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null;
+$$;
+grant execute on function public.is_admin() to authenticated;
+
+-- ---------- I. Seed data (idempotent) ----------
+insert into public.product_categories (name, sort) values
+  ('Silicone',1),('Clear',2),('MagSafe',3),('Wallet',4)
+on conflict (name) do nothing;
+
+-- Sample products (only if the table is empty, so we never duplicate real stock).
+insert into public.readymade_products (name, slug, price, old_price, description, category_id, image_urls, model_fit, stock, variants, best_seller, is_combo, sort)
+select * from (values
+  ('Frosted Clear Case','frosted-clear-case', 349, 499,
+   E'**Slim frosted-clear** shell.\n\n- Anti-yellow coating\n- Raised camera lip\n- MagSafe-friendly',
+   (select id from public.product_categories where name='Clear'),
+   array['https://placehold.co/600x600/EFE9DC/211C15?text=Clear+Case'], 'Fits most iPhone & Android', 25,
+   array['Clear','Frosted','Black-trim'], true, false, 1),
+  ('Liquid Silicone Case','liquid-silicone-case', 449, 599,
+   E'Soft-touch **liquid silicone** with microfiber lining.',
+   (select id from public.product_categories where name='Silicone'),
+   array['https://placehold.co/600x600/EFE9DC/211C15?text=Silicone'], 'iPhone 13–15 series', 40,
+   array['Midnight','Sand','Sky','Pink'], true, false, 2),
+  ('MagSafe Ring Case','magsafe-ring-case', 549, null,
+   E'Built-in **MagSafe ring**. Strong magnet, slim profile.',
+   (select id from public.product_categories where name='MagSafe'),
+   array['https://placehold.co/600x600/EFE9DC/211C15?text=MagSafe'], 'iPhone 12 and newer', 15,
+   array['Black','Clear'], false, false, 3),
+  ('Card-Holder Wallet Case','card-holder-wallet-case', 399, 549,
+   E'Back **card pocket** holds 2–3 cards. Combo deal.',
+   (select id from public.product_categories where name='Wallet'),
+   array['https://placehold.co/600x600/EFE9DC/211C15?text=Wallet'], 'Fits most phones', 30,
+   array['Brown','Black'], false, true, 4)
+) v
+where not exists (select 1 from public.readymade_products);
+
+-- Backfill slug for any product missing one (name → hyphenated norm + id suffix).
+update public.readymade_products
+  set slug = trim(both '-' from regexp_replace(lower(name), '[^a-z0-9]+', '-', 'g')) || '-' || id
+  where slug is null or slug = '';
+
+-- Sample coupon
+insert into public.promos (code,type,value,min_order,active) values ('WELCOME10','percent',10,300,true)
+  on conflict (code) do nothing;
+
+-- Two approved sample reviews for the first sample product (only if it exists & has none).
+insert into public.reviews (product_id, author_name, rating, body, status)
+select p.id, v.nm, v.rt, v.bd, 'approved'
+from public.readymade_products p
+cross join (values ('Tanvir',5,'Great quality, fits perfectly!'),('Rumana',4,'Nice case, fast delivery.')) v(nm,rt,bd)
+where p.slug='frosted-clear-case'
+  and not exists (select 1 from public.reviews r where r.product_id = p.id);
 
 -- Done. Public buckets serve files at:
 --   https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>

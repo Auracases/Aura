@@ -43,4 +43,29 @@ const CONFIG = {
     DESIGNS: [],   // no preset designs offline; real ones come from Supabase
   },
 
+  /* ---- 5) STOREFRONT CONTENT DEFAULTS ----
+     The shop deep-merges public.site_content (admin-editable) OVER this object,
+     so the store renders sensibly before any content is set, and the owner can
+     change copy/links/sections live from admin without a redeploy. Every block
+     has a `show` toggle. */
+  SITE_DEFAULTS: {
+    store_name: "Aura Cases",
+    announcement:       { show: true,  text: "Free delivery on orders over ৳1500 · Cash on delivery", link: "" },
+    hero:               { show: true,  slides: [
+      { image: "", title: "Cases that actually fit", subtitle: "Premium phone cases, ready to ship across Bangladesh.", cta_text: "Shop now", cta_link: "#grid" }
+    ] },
+    trust_badges:       { show: true,  items: [
+      { icon: "🚚", label: "Cash on delivery" },
+      { icon: "↩️", label: "Easy returns" },
+      { icon: "⭐", label: "Trusted by 1000+" }
+    ] },
+    product_info_boxes: { show: true,  items: [
+      { title: "Delivery", body: "Inside Dhaka 1–2 days, outside 2–4 days. Cash on delivery available." },
+      { title: "Quality", body: "Each case is checked before dispatch. Not happy? Easy returns." }
+    ] },
+    contact:            { show: true,  phone: "", email: "", address: "" },
+    social:             { facebook: "", instagram: "", whatsapp: "", tiktok: "" },
+    nav_categories:     []   // ordered product_category ids pinned in the top nav (empty = show all)
+  },
+
 };

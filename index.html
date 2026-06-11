@@ -56,10 +56,14 @@
   .logo{font-family:var(--font-display);font-weight:800;font-size:1.45rem;letter-spacing:-.5px;line-height:1;}
   .logo span{color:var(--accent);}
   .logo small{display:block;font-family:var(--font-body);font-weight:500;font-size:.62rem;color:var(--ink-soft);letter-spacing:.05em;margin-top:2px;}
+  .nav{display:flex;align-items:center;gap:8px;}
   .nav-btn{
     text-decoration:none;background:var(--accent);color:#fff;border:2px solid var(--ink);
-    border-radius:12px;padding:10px 18px;font-weight:700;font-size:.9rem;box-shadow:2px 2px 0 var(--ink);
+    border-radius:11px;padding:9px 13px;font-weight:700;font-size:.85rem;box-shadow:2px 2px 0 var(--ink);
+    white-space:nowrap;line-height:1;transition:transform .08s;
   }
+  .nav-btn:active{transform:translate(2px,2px);box-shadow:none;}
+  .nav-btn.ghost{background:#fff;color:var(--ink);}
   .cart-btn{
     position:relative;background:var(--ink);color:#fff;border:2px solid var(--ink);
     border-radius:12px;padding:9px 14px;font-family:var(--font-body);font-weight:700;font-size:.85rem;
@@ -401,8 +405,11 @@
 <header>
   <div class="head-in">
     <a href="index.html" class="logo" style="text-decoration:none;color:inherit">Aura <span>Cases</span><small>তোমার ফোন, তোমার স্টাইল</small></a>
-    <a href="demos.html" class="nav-btn">📸 Cases Demo</a>
-    <button class="cart-btn" id="cartBtn" style="display:none">Cart <span class="cart-count" id="cartCount">0</span></button>
+    <nav class="nav">
+      <a href="shop.html" class="nav-btn">🛍 Shop</a>
+      <a href="demos.html" class="nav-btn ghost">📸 Cases Demos</a>
+      <button class="cart-btn" id="cartBtn" style="display:none">Cart <span class="cart-count" id="cartCount">0</span></button>
+    </nav>
   </div>
 </header>
 

@@ -1,2 +1,5 @@
 data/raw-phones.*
 data/raw_*.csv
+
+# Supabase CLI local link metadata
+supabase/.temp/
